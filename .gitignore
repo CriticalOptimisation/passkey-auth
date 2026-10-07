@@ -1,0 +1,30 @@
+# Local design notes: never published. They come from earlier work and may
+# name third parties; see the session bootstrap issue.
+analyses/
+
+# One worktree per branch lives here.
+.worktrees/
+
+# Secrets and local configuration.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Node.js
+node_modules/
+npm-debug.log*
+.npm/
+
+# Build and test output
+dist/
+build/
+coverage/
+.cache/
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
