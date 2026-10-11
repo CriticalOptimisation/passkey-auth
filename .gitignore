@@ -12,10 +12,20 @@ analyses/
 *.pem
 *.key
 
-# Node.js
+# Go
+/bin/
+*.test
+*.out
+*.db
+*.db-shm
+*.db-wal
+
+# Node.js (end-to-end tests only)
 node_modules/
 npm-debug.log*
 .npm/
+/e2e/test-results/
+/e2e/playwright-report/
 
 # Build and test output
 dist/
