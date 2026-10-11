@@ -1,0 +1,12 @@
+{
+  "name": "passkey-auth-e2e",
+  "private": true,
+  "type": "module",
+  "description": "End-to-end ceremony tests in Chromium with CDP virtual authenticators",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.0"
+  }
+}
