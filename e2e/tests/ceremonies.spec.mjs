@@ -15,7 +15,7 @@ test("registers a passkey, then authenticates with it as a discoverable credenti
   const reg = await helper.register(await service.ticket(account, "Test user"));
   expect(reg.error).toBeUndefined();
   const r = verifyToken(reg.token, jwks, { issuer: ISSUER, audience: AUDIENCE });
-  expect(r).toMatchObject({ ceremony: "registration", sub: account, origin: ORIGIN, uv: true, be: synced, bs: synced });
+  expect(r).toMatchObject({ ceremony: "registration", sub: account, origin: ORIGIN, uv: true, be: synced, bs: synced, assurance: "passkey" });
   expect(r.cred).toMatch(/^[A-Za-z0-9_-]+$/);
   expect(r.exp - r.iat).toBe(60);
 
@@ -23,7 +23,7 @@ test("registers a passkey, then authenticates with it as a discoverable credenti
   const auth = await helper.authenticate(nonce);
   expect(auth.error).toBeUndefined();
   const a = verifyToken(auth.token, jwks, { issuer: ISSUER, audience: AUDIENCE });
-  expect(a).toMatchObject({ ceremony: "authentication", sub: account, origin: ORIGIN, cred: r.cred, nonce, uv: true, be: synced, bs: synced });
+  expect(a).toMatchObject({ ceremony: "authentication", sub: account, origin: ORIGIN, cred: r.cred, nonce, uv: true, be: synced, bs: synced, assurance: "passkey", aaguid: r.aaguid });
   expect(a.jti).not.toBe(r.jti);
 });
 

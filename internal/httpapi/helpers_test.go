@@ -218,15 +218,16 @@ func (e *env) assertion(a *testauthn.Authenticator, nonce string, o testauthn.Ov
 
 // custom holds the service-specific claims of a result token.
 type custom struct {
-	Ceremony string `json:"ceremony"`
-	Origin   string `json:"origin"`
-	Cred     string `json:"cred"`
-	UV       bool   `json:"uv"`
-	BE       bool   `json:"be"`
-	BS       bool   `json:"bs"`
-	Nonce    string `json:"nonce,omitempty"`
-	AAGUID   string `json:"aaguid,omitempty"`
-	Fmt      string `json:"fmt,omitempty"`
+	Ceremony  string `json:"ceremony"`
+	Origin    string `json:"origin"`
+	Cred      string `json:"cred"`
+	UV        bool   `json:"uv"`
+	BE        bool   `json:"be"`
+	BS        bool   `json:"bs"`
+	Nonce     string `json:"nonce,omitempty"`
+	Assurance string `json:"assurance"`
+	AAGUID    string `json:"aaguid,omitempty"`
+	Fmt       string `json:"fmt,omitempty"`
 }
 
 // claims is the payload of a result token.

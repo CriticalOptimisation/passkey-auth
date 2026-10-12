@@ -26,7 +26,7 @@ func TestRegisterThenAuthenticate(t *testing.T) {
 			}
 			e.checkStandardClaims(reg)
 			cred := testauthn.B64(a.Latest().ID)
-			want := custom{Ceremony: "registration", Origin: origin, Cred: cred, UV: true, BE: p.BackupEligible, BS: p.BackupState, AAGUID: uuid(p.AAGUID), Fmt: "none"}
+			want := custom{Ceremony: "registration", Origin: origin, Cred: cred, UV: true, BE: p.BackupEligible, BS: p.BackupState, Assurance: "passkey", AAGUID: uuid(p.AAGUID), Fmt: "none"}
 			if reg.Subject != "account-1" || reg.custom != want {
 				t.Errorf("registration claims:\n got %+v sub %q\nwant %+v sub account-1", reg.custom, reg.Subject, want)
 			}
@@ -38,7 +38,7 @@ func TestRegisterThenAuthenticate(t *testing.T) {
 				t.Fatalf("authentication token: %v", err)
 			}
 			e.checkStandardClaims(auth)
-			want = custom{Ceremony: "authentication", Origin: origin, Cred: cred, UV: true, BE: p.BackupEligible, BS: p.BackupState, Nonce: nonce}
+			want = custom{Ceremony: "authentication", Origin: origin, Cred: cred, UV: true, BE: p.BackupEligible, BS: p.BackupState, Nonce: nonce, Assurance: "passkey", AAGUID: uuid(p.AAGUID)}
 			if auth.Subject != "account-1" || auth.custom != want {
 				t.Errorf("authentication claims:\n got %+v sub %q\nwant %+v sub account-1", auth.custom, auth.Subject, want)
 			}
