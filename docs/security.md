@@ -1,14 +1,14 @@
 # Security model
 
 This document states what a result token proves, which components are
-trusted to make that proof hold, and how to deploy the service where the
-user's browser can be trusted and where it cannot.
+trusted to make that proof hold, and how a host can grant rights according to
+the kind of authenticator the user holds.
 
 - [What the service proves](#what-the-service-proves)
 - [Components and the security boundary](#components-and-the-security-boundary)
 - [What each check relies on](#what-each-check-relies-on)
 - [Threats and residual risks](#threats-and-residual-risks)
-- [Deployment profiles](#deployment-profiles)
+- [Assurance profiles](#assurance-profiles)
 - [Obligations of the host](#obligations-of-the-host)
 - [Out of scope](#out-of-scope)
 
@@ -28,16 +28,16 @@ It does **not** state:
   registration ticket;
 - **that the person meant to perform this ceremony.** This depends on the
   browser (see [the browser's role](#the-browser));
-- **that the authenticator is a hardware device**, unless the deployment
-  requires attestation (see [Profile C](#profile-c-untrusted-browser-attested-hardware-keys)).
+- **that the authenticator is a hardware device**, unless its `assurance` claim
+  says so (see [Assurance profiles](#assurance-profiles)).
 
 ## Components and the security boundary
 
 ```
              trusted for its stated role          not trusted
   ┌──────────────────────────────────────────┐
-  │ authenticator   browser + OS (profile-   │   network (TLS protects it)
-  │                 dependent, see below)    │   page scripts and the helper
+  │ authenticator   browser + OS (honest,    │   network (TLS protects it)
+  │                 see "The browser")       │   page scripts and the helper
   │ passkey-auth    signing key   config     │   any caller of the public routes
   │ Traefik (TLS)   host backend             │   other containers on the network
   └──────────────────────────────────────────┘   database content (integrity: see below)
@@ -48,7 +48,7 @@ It does **not** state:
 | Component | Trusted for | Why this trust is reasonable |
 |---|---|---|
 | **Authenticator** | keeping the private key secret; signing only after user presence (UP) and, when asked, user verification (UV); reporting its counter and backup flags honestly | The private key never leaves it. A hardware key enforces this in a secure element; a platform authenticator enforces it in the OS's protected key store. The flags are inside the signed authenticator data, so nobody downstream can alter them. |
-| **Browser and OS** | writing the true page origin into `clientDataJSON`, using the RP ID the page is entitled to, and showing the user a real ceremony | This is the WebAuthn trust model: the browser is the only party that sees the page's origin. How far this trust holds is what separates the [deployment profiles](#deployment-profiles). |
+| **Browser and OS** | writing the true page origin into `clientDataJSON`, using the RP ID the page is entitled to, and showing the user a real ceremony | This is the WebAuthn trust model: the browser is the only party that sees the page's origin. How far this trust holds is discussed under [The browser](#the-browser). |
 | **passkey-auth** (code, configuration, clock) | checking every ceremony and signing only verified results | It is the relying party. Its configuration (`PA_RP_ID`, `PA_ORIGINS`) sets what the checks compare against. |
 | **Result-signing key** | proving that a token comes from the service | Whoever holds it can forge a token for any account. It lives only in a mounted file and in memory. |
 | **Traefik** | TLS termination; rate limits | It is the only path from the LAN or the Internet to the service. |
@@ -87,7 +87,7 @@ signs whatever the browser hands it.
 - **What it cannot do**, against an attested hardware key, is extract the key,
   emulate the device, or produce a signature without a physical touch.
 
-Hence the deployment profiles below.
+Hence the assurance profiles below.
 
 ## What each check relies on
 
@@ -111,7 +111,7 @@ Hence the deployment profiles below.
 | **XSS on an allowed origin** | an injected script can run a ceremony *as the page*: the user sees a genuine prompt, and the token is valid | the host's own XSS defences (CSP, output encoding). The host's nonce, bound to its server-side login attempt, means the token is only accepted for the session that asked for it. |
 | Stolen authenticator | useless without PIN or biometric (UV) | UV required; the host revokes the credential (#5) |
 | Unlocked device left with an open session | outside WebAuthn | the host's session policy |
-| Malware or a compromised browser | see [The browser](#the-browser) | profile C limits it to "one touch, one ceremony"; nothing can stop a compromised browser from misdirecting a touch the user gives |
+| Malware or a compromised browser | see [The browser](#the-browser) | the `attested-hardware` profile limits it to "one touch, one ceremony"; with any authenticator, nothing can stop a compromised browser from misdirecting a touch the user gives |
 | Stolen registration ticket | the thief registers their own passkey on the account | short TTL, single use, delivered over the host's authenticated session; the host can list and revoke credentials (#5) |
 | Leaked database | nothing forgeable | public material only |
 | **Database write access** | attacker adds a credential, takes over accounts | access control on the volume and backups |
@@ -119,85 +119,90 @@ Hence the deployment profiles below.
 | Denial of service | ceremonies refused | Traefik rate limits per IP and global; challenge cap |
 | Lost all authenticators | user locked out | recovery by the host (#8); users are encouraged to register two authenticators |
 
-## Deployment profiles
+## Assurance profiles
 
-The service's checks are the same in every profile. What changes is what the
-deployment can rely on from the browser, and therefore what it must require
-from the authenticator.
+The service's checks are the same for every credential. What differs from one
+credential to another is **what the authenticator proves about itself**. That
+is the only property the service can verify. A profile therefore belongs to a
+**credential**, and through it to the user who holds it, not to a deployment.
+The host grants rights according to the profile of the credential used for
+each login.
 
-### Profile A: consumer web (default)
+**Why managed browsers do not make a profile.** A corporate environment
+(managed browser versions, allow-listed extensions, filtered Internet) makes a
+compromised browser less likely, but the service cannot tell whether a
+ceremony ran in one. A user can still run another browser on a company
+computer. And once a browser is compromised, it can misdirect a signature with
+any authenticator, hardware keys included (see [The browser](#the-browser)).
+So the environment does not change what a result token proves: it is an
+organisational measure, outside the service.
 
-The ordinary web: users' own devices and browsers, synced passkeys accepted.
+The result token carries the profile in its `assurance` claim, at registration
+and at every authentication.
 
-- **Assumption:** browsers are honest, as everywhere on the web.
-- **Settings:** the defaults of #4. UV required, attestation recorded but not
-  required.
-- **What it gives:** phishing resistance and no shared secret. This is far
-  stronger than passwords or one-time codes, but the device itself is not
-  vouched for.
+### `passkey`: any authenticator (available now)
 
-### Profile B: trusted browser (managed corporate environment)
+- **Authenticators:** any WebAuthn authenticator, synced passkeys included.
+  User verification is required.
+- **What it proves:** possession of the registered credential and a verified
+  user, with phishing resistance, provided the browser is honest. There is no
+  shared secret.
+- **What it does not prove:** that the authenticator is a hardware device. A
+  compromised browser can register and use a software authenticator, with
+  nobody present.
+- **Suits:** everyday sign-in. In the age-band demonstrator, it is the profile
+  that holds the credential.
 
-Devices and browsers under the organisation's control.
+### `attested-hardware`: certified hardware key (#9)
 
-- **Conditions under which the browser can be trusted:**
-  - browser versions centrally managed and kept up to date by policy;
-  - extensions allow-listed;
-  - devices managed (MDM) with endpoint protection;
-  - Internet access filtered, which cuts the main routes for malware and
-    phishing.
-- **Settings:**
-  - the defaults of #4 apply;
-  - authenticators may be the platform's (for example Windows Hello) or keys
-    issued by the organisation;
-  - **optional, enterprise attestation.** The browser policy names the RP IDs
-    allowed to receive individual attestation, and the service can then tell
-    *which* issued key was used. This needs the attestation policy of #9;
-  - **optional, refuse synced passkeys**, if credentials must not leave
-    managed devices. The host rejects tokens with `be: true`, or #9 refuses
-    them at registration.
-- **What it gives:** profile A's guarantees, plus confidence that ceremonies
-  happen on managed devices. The trust in the browser comes from the
-  organisation's management, not from WebAuthn.
-
-### Profile C: untrusted browser, attested hardware keys
-
-Browsers that cannot be vouched for: unmanaged devices, high-value
-operations, or users who may be under attack.
-
-- **Requirements** (the attestation policy of #9; not yet implemented in #4,
-  which records `fmt` and `aaguid` only):
-  - `attestation: "direct"`. Registration **refuses** `none` and self
-    attestation;
-  - the attestation chain is verified against the FIDO Metadata Service
-    (MDS3). The device's status must not be revoked or compromised;
-  - **AAGUID allow-list** limited to hardware keys of the required
-    certification level;
-  - **`be` must be false**: hardware keys are not backup-eligible, so their
-    credential cannot be copied;
-  - UV required. Prefer keys that verify the user **on the key** (built-in
-    biometric): their PIN never goes through the browser.
-- **What it gives:**
-  - the credential lives in certified hardware and cannot be copied, so the
-    counter check becomes meaningful;
+- **Authenticators:** hardware keys whose attestation verifies against the
+  attestation policy of #9:
+  - `attestation: "direct"`; `none` and self attestation are refused for this
+    profile;
+  - chain verified against the FIDO Metadata Service (MDS3), status not
+    revoked or compromised;
+  - AAGUID on an allow-list of hardware keys at the required certification
+    level;
+  - `be` false: the credential cannot be synced or copied.
+- **What it proves**, beyond `passkey`:
+  - the private key lives in certified hardware and cannot be copied, so the
+    counter check is meaningful;
   - every ceremony needs a physical touch of that key;
-  - a compromised browser cannot register a software authenticator, and
-    cannot log in without the key.
-- **What it does not give:** a compromised browser can still spend a genuine
-  touch on a ceremony other than the one the user thinks they are doing, for
-  example a relayed login. The guarantee is "this key and a human touch", not
-  "this intention". Where intention matters (approving a payment, for
-  example), the host must confirm the operation over another channel.
+  - even a compromised browser can neither register a software authenticator
+    under this profile, nor log in without the key.
 
-### Choosing
+  Prefer keys that verify the user on the key itself (a built-in biometric):
+  their PIN never goes through the browser.
+- **What it does not prove:** that the user meant this ceremony. A compromised
+  browser can spend a genuine touch on a relayed ceremony. The guarantee is
+  "this key and a human touch". Where intention matters (approving a payment,
+  for example), the host confirms the operation over another channel as well.
+- **Suits:** unlocking sensitive operations.
 
-| Question | A | B | C |
-|---|---|---|---|
-| Who controls the browser? | the user | the organisation | nobody we trust |
-| Synced passkeys | yes | optional | no |
-| Attestation required | no | optional (enterprise) | yes, hardware only |
-| A software authenticator in a compromised browser can register | yes | prevented by management | no |
-| Available in #4 | yes | yes, except the attestation options (#9) | no: needs #9 |
+A credential whose attestation does not meet the policy is still registered,
+under `passkey`. The service never refuses a usable passkey for lack of
+attestation, unless the deployment sets a minimum profile (#9).
+
+### How a host uses the profiles
+
+- **Map rights to profiles.** For example: reading with `passkey`;
+  administering, paying or changing recovery settings with
+  `attested-hardware`.
+- **Step up.** A user may hold credentials of both profiles, for example a
+  synced passkey on a phone and a hardware key. A sensitive operation asks for
+  a fresh authentication and accepts the token only if `assurance` is
+  `attested-hardware`. The token is short-lived and bound to the host's nonce,
+  so it cannot be reused for another operation.
+- **Registration policy.** The host decides which profile a role requires and
+  tells the user which key to register.
+
+| | `passkey` | `attested-hardware` |
+|---|---|---|
+| Synced passkeys | yes | no |
+| Attestation | recorded if present | required, verified, AAGUID allow-listed |
+| Software authenticator in a compromised browser | can register and log in | cannot |
+| Misdirected touch in a compromised browser | possible | possible |
+| Available | #4 | #9 |
 
 ## Obligations of the host
 
@@ -207,7 +212,8 @@ operations, or users who may be under attack.
    `typ`, `iss`, `aud`, `exp`, `ceremony`; for an authentication, a `nonce`
    that it issued for this login attempt and that has not been used before;
    and `origin` when several applications share a deployment.
-3. Apply its profile's policy to `be`/`bs` (and, from #9, `aaguid`).
+3. Grant rights according to the token's `assurance` claim, and require a
+   fresh `attested-hardware` authentication for sensitive operations.
 4. Protect its own pages against XSS, since a script on an allowed origin can
    run ceremonies.
 5. Revoke credentials when an authenticator is lost and when an account is

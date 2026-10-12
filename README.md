@@ -7,7 +7,7 @@ result token. It keeps no session and stores public key material only.
 
 - [API contract](docs/api.md): routes, browser helper, result token, errors
 - [Configuration](docs/configuration.md): environment variables, signing key, storage, Traefik
-- [Security model](docs/security.md): security boundary, threats, deployment profiles (trusted and untrusted browsers)
+- [Security model](docs/security.md): security boundary, threats, assurance profiles (any passkey, attested hardware key)
 
 ## Personal data (GDPR)
 

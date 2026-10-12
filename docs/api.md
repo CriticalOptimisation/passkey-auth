@@ -284,7 +284,8 @@ Claims:
 | `be` | both | backup eligible: the credential can be synced |
 | `bs` | both | backup state: the credential is currently synced |
 | `nonce` | authentication | the host nonce, as received |
-| `aaguid` | registration | authenticator model, UUID string (all zeros when unknown) |
+| `assurance` | both | profile of the credential: `passkey`, or `attested-hardware` once its attestation meets the policy of #9; see [security.md](security.md#assurance-profiles). Until #9, always `passkey`. |
+| `aaguid` | both | authenticator model, UUID string (all zeros when unknown) |
 | `fmt` | registration | attestation format (`none`, `packed`, ...) |
 
 **Verifying a token (host backend).** The host must:
@@ -296,7 +297,8 @@ Claims:
    skew);
 4. check `ceremony`; for an authentication, check that `nonce` is the one it
    issued for this login attempt and has not been used before;
-5. when several applications share a deployment, check `origin`.
+5. grant rights according to `assurance`;
+6. when several applications share a deployment, check `origin`.
 
 The token is accepted once: the host may record `jti` until `exp`.
 
@@ -416,7 +418,7 @@ number of live challenges.
 
 ## Security properties
 
-The security boundary, the threats and the deployment profiles are described
+The security boundary, the threats and the assurance profiles are described
 in [security.md](security.md).
 
 | Property | How |
