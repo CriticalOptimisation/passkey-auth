@@ -2,7 +2,7 @@ module github.com/CriticalOptimisation/passkey-auth
 
 go 1.27
 
-toolchain go1.27.2
+toolchain go1.27.1
 
 require (
 	github.com/fxamacker/cbor/v2 v2.9.6

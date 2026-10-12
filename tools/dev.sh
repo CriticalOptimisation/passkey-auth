@@ -9,7 +9,7 @@
 # Module and build caches live under ~/.cache/passkey-auth.
 set -euo pipefail
 
-readonly GO_IMAGE=golang:1.27.2
+readonly GO_IMAGE=golang:1.27.1
 readonly PW_IMAGE=mcr.microsoft.com/playwright:v1.64.0-noble
 
 root=$(git rev-parse --show-toplevel)
