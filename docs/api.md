@@ -8,6 +8,7 @@ written before the implementation; the tests illustrate it.
 - [Conventions](#conventions)
 - [Registration](#registration)
 - [Authentication](#authentication)
+- [Origin check](#origin-check)
 - [Result token](#result-token)
 - [Keys](#keys)
 - [Browser helper](#browser-helper)
@@ -79,7 +80,15 @@ host issues a new ticket.
 
 The first registration of an account creates its **user handle**: 64 random
 bytes, used as the WebAuthn `user.id`. The host's account reference never
-reaches the authenticator.
+reaches the authenticator. The display name is kept only in the ticket: it is
+sent to the authenticator in the options, then deleted with the ticket.
+
+**Registration only ever adds a credential.** It never removes or replaces
+one. A ceremony that fails at any step, a lost connection or an expired
+ticket included, costs only the ticket: credentials already registered keep
+working. To replace an authenticator, the host registers the new one first and
+revokes the old one (host-facing API, #5) only after the new registration
+token has arrived.
 
 ### `POST /v1/registration/options`
 
@@ -142,7 +151,7 @@ Response `200`:
 ```
 
 The service checks the challenge (known, unused, unexpired, issued for a
-registration), the type, the origin, the RP ID hash, the user-present and
+registration), the type, the [origin](#origin-check), the RP ID hash, the user-present and
 user-verified flags, the algorithm and, when present, the attestation
 statement. It stores the credential and returns a [result token](#result-token).
 
@@ -212,7 +221,7 @@ Response `200`:
 ```
 
 The service checks the challenge (known, unused, unexpired, issued for an
-authentication), the type, the origin, the RP ID hash, the user-present and
+authentication), the type, the [origin](#origin-check), the RP ID hash, the user-present and
 user-verified flags, the credential (known, and belonging to `userHandle`), the
 signature, and the **signature counter**:
 
@@ -226,6 +235,26 @@ On success the counter, the backup flags and the last-used time are updated.
 
 Errors: `challenge_invalid`, `credential_unknown`, `verification_failed`,
 `invalid_request`.
+
+## Origin check
+
+The origin is the security check that defeats phishing, so its rules are
+exact:
+
+- **`PA_ORIGINS` is normalised once, at startup.** Scheme and host are
+  lowercased, and a default port (`:443` for `https`, `:80` for `http`) is
+  removed. A trailing `/` is dropped. Anything else is refused at startup: a
+  path, query, fragment or user info; a percent-encoded character; or a host
+  that is not ASCII. Internationalised domain names are written in their
+  punycode form (`xn--...`), so the service needs no IDNA library.
+- **The `origin` of `clientDataJSON` is not normalised.** The browser writes it
+  in exactly that canonical form (the ASCII serialisation of the origin in the
+  HTML standard). It is compared **byte for byte** with the normalised list. A
+  value in any other form did not come from a conforming browser and is
+  rejected.
+- `clientDataJSON.crossOrigin` must be absent or `false`, and `topOrigin` must
+  be absent: a ceremony run inside a cross-origin frame is rejected. The
+  embedded frame of #10 will change this rule, and only for its own origin.
 
 ## Result token
 
@@ -301,8 +330,22 @@ is not part of the security boundary: it may also be bundled with the host's
 own scripts. The service logs each load of the helper (requesting origin and
 helper version only), as a usage metric.
 
-The helper calls the routes next to its own URL, so a path prefix set by the
-reverse proxy needs no configuration.
+**Where the helper sends its requests.** Every function takes an optional
+`baseURL`: the service root, under which the routes `v1/...` are resolved.
+
+- When the helper is **loaded from the service** (`import ... from
+  "https://example.com/auth/v1/passkey-auth.js"`), `baseURL` defaults to the
+  service root derived from the module's own URL (`new URL("..",
+  import.meta.url)`). A path prefix set by the reverse proxy then needs no
+  configuration.
+- When the helper is **bundled** with the host's scripts, the module's URL is
+  the bundle's, and the default is meaningless: the host must pass `baseURL`.
+  Minification keeps what the host relies on: the exported names, the
+  `baseURL` option, and the route paths and JSON shapes of this contract.
+
+When `baseURL` is on another origin than the page, the ceremony routes answer
+only if the page's origin is in `PA_ORIGINS` (see
+[Cross-origin access](#cross-origin-access)).
 
 ```js
 import { register, authenticate, PasskeyAuthError } from "/auth/v1/passkey-auth.js";
@@ -315,6 +358,9 @@ const token = await authenticate(nonce);
 
 // Passkey autofill: requires <input autocomplete="username webauthn">.
 const token = await authenticate(nonce, { conditional: true, signal });
+
+// Bundled helper: name the service root explicitly.
+const token = await authenticate(nonce, { baseURL: "https://example.com/auth/" });
 ```
 
 Both functions resolve to the result token, a string, which the page sends to

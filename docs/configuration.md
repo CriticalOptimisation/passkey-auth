@@ -59,7 +59,8 @@ running several replicas needs another storage backend.
 
 Structured JSON on standard output: one line per request, plus the reason of
 every rejected ceremony. Logs carry no challenge, ticket, token or key
-material.
+material, and no IP address or account reference (see the GDPR section of the
+README). The reverse proxy's own logs are the operator's responsibility.
 
 ## Behind Traefik
 
