@@ -75,6 +75,8 @@ type Overrides struct {
 	UV           *bool   // UV flag; default: the profile's
 	Counter      *uint32 // exact counter to report (assertions only); default: stored + step
 	CredentialID []byte  // credential to use (assertions only); default: the latest for the RP ID
+	CrossOrigin  bool    // clientDataJSON.crossOrigin
+	TopOrigin    string  // clientDataJSON.topOrigin; omitted when empty
 }
 
 // Credential is a key pair held by the authenticator.
@@ -336,12 +338,16 @@ func (a *Authenticator) clientData(typ string, challenge []byte, o Overrides) ([
 	if o.Origin != "" {
 		origin = o.Origin
 	}
-	return json.Marshal(map[string]any{
+	cd := map[string]any{
 		"type":        typ,
 		"challenge":   B64(challenge),
 		"origin":      origin,
-		"crossOrigin": false,
-	})
+		"crossOrigin": o.CrossOrigin,
+	}
+	if o.TopOrigin != "" {
+		cd["topOrigin"] = o.TopOrigin
+	}
+	return json.Marshal(cd)
 }
 
 // coseES256 encodes a P-256 public key as a COSE_Key (RFC 9053).

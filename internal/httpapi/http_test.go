@@ -19,7 +19,7 @@ func TestHelperIsLoadableFromAnyOrigin(t *testing.T) {
 	if got := r.Header.Get("Cross-Origin-Resource-Policy"); got != "cross-origin" {
 		t.Errorf("Cross-Origin-Resource-Policy = %q, want cross-origin", got)
 	}
-	for _, export := range []string{"export async function register", "export async function authenticate", "export class PasskeyAuthError"} {
+	for _, export := range []string{"export async function register", "export async function authenticate", "export class PasskeyAuthError", "baseURL"} {
 		if !strings.Contains(string(body), export) {
 			t.Errorf("helper lacks %q", export)
 		}

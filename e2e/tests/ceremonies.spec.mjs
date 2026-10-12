@@ -54,3 +54,23 @@ test("a second authenticator can be registered for the same account", async ({ w
   const a = check((await helper.authenticate(newNonce())).token);
   expect(a).toMatchObject({ sub: account, cred: two.cred });
 });
+
+test("a bundled copy of the helper works with an explicit baseURL", async ({ page, webauthn, service, helper, baseURL }, info) => {
+  await webauthn.add();
+  await helper.open();
+  const ticket = await service.ticket(`bundled-${info.project.name}-${Date.now()}`);
+  // A blob: URL stands for a bundle: the module's own URL says nothing about
+  // where the service is.
+  const res = await page.evaluate(async ([ticket, base]) => {
+    const src = await (await fetch("/v1/passkey-auth.js")).text();
+    const m = await import(URL.createObjectURL(new Blob([src], { type: "text/javascript" })));
+    try {
+      return { token: await m.register(ticket, { baseURL: base }) };
+    } catch (e) {
+      return { error: e.code ?? String(e) };
+    }
+  }, [ticket, `${baseURL}/`]);
+  expect(res.error).toBeUndefined();
+  const claims = verifyToken(res.token, await fetchJWKS(baseURL), { issuer: ISSUER, audience: AUDIENCE });
+  expect(claims.ceremony).toBe("registration");
+});
