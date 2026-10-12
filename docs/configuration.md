@@ -20,6 +20,7 @@ faulty variable, if anything is missing or invalid.
 | `PA_CHALLENGE_TTL` | no | `5m` | validity of a ceremony challenge, Go duration syntax |
 | `PA_TICKET_TTL` | no | `15m` | validity of a registration ticket |
 | `PA_TOKEN_TTL` | no | `60s` | lifetime of a result token |
+| `PA_MAX_CHALLENGES` | no | `100000` | live challenges above which `options` answers `503 unavailable` |
 
 Validation rules:
 
@@ -99,45 +100,113 @@ the host-facing routes.
 Example labels: the service under `/auth` on the host's own domain. Router and
 middleware names are global to a Traefik instance, so prefix them.
 
+**How Traefik picks a router.** Among the routers whose rule matches a
+request, Traefik takes the one with the **highest priority**. It is not the
+first or the last one declared. A router without an explicit priority gets the
+length of its rule string as its priority. The routers below set their
+priorities explicitly, so the result does not depend on how long the rules
+are.
+
+| Request | Router | Middlewares, in order |
+|---|---|---|
+| `POST /auth/v1/registration/options`, `POST /auth/v1/authentication/options` | `pa-options` (priority 200) | strip `/auth`, global ceiling, per-IP limit for ceremony starts, per-IP concurrency, security headers |
+| any other path under `/auth/`: the `verify` routes, JWKS, helper, unknown paths | `pa-public` (priority 100) | strip `/auth`, global ceiling, per-IP limit, per-IP concurrency, security headers |
+
+**Every route is rate-limited**, including paths the service does not know.
+There are three limits:
+
+- **a per-IP limit on every route** (`pa-rl-ip`);
+- **a tighter per-IP limit on ceremony starts** (`pa-rl-options`). An anonymous
+  caller can create challenges there;
+- **a global ceiling** (`pa-rl-global`). All callers share one bucket
+  (`sourcecriterion.requesthost`), so a flood spread over many addresses is
+  capped too. When the ceiling is reached, legitimate users are refused (429)
+  as well: that is the price of protecting the service.
+
+A request that exceeds a limit gets `429 Too Many Requests` from Traefik and
+never reaches the service. The limits are kept in memory by each Traefik
+instance.
+
 ```
 traefik.enable=true
-traefik.http.routers.pa-public.rule=Host(`example.com`) && PathPrefix(`/auth/`)
-traefik.http.routers.pa-public.entrypoints=websecure
-traefik.http.routers.pa-public.tls=true
-traefik.http.routers.pa-public.middlewares=pa-strip,pa-inflight,pa-headers
-traefik.http.routers.pa-public.service=pa-public
 traefik.http.services.pa-public.loadbalancer.server.port=8080
 
-# Ceremony starts: an anonymous caller can create challenges, so rate-limit them.
-traefik.http.routers.pa-options.rule=Host(`example.com`) && PathRegexp(`^/auth/v1/(registration|authentication)/options$`)
+traefik.http.routers.pa-public.rule=Host(`example.com`) && PathPrefix(`/auth/`)
+traefik.http.routers.pa-public.priority=100
+traefik.http.routers.pa-public.entrypoints=websecure
+traefik.http.routers.pa-public.tls=true
+traefik.http.routers.pa-public.middlewares=pa-strip,pa-rl-global,pa-rl-ip,pa-inflight,pa-headers
+traefik.http.routers.pa-public.service=pa-public
+
+traefik.http.routers.pa-options.rule=Host(`example.com`) && Method(`POST`) && PathRegexp(`^/auth/v1/(registration|authentication)/options$`)
+traefik.http.routers.pa-options.priority=200
 traefik.http.routers.pa-options.entrypoints=websecure
 traefik.http.routers.pa-options.tls=true
-traefik.http.routers.pa-options.priority=100
-traefik.http.routers.pa-options.middlewares=pa-strip,pa-ratelimit,pa-inflight,pa-headers
+traefik.http.routers.pa-options.middlewares=pa-strip,pa-rl-global,pa-rl-options,pa-inflight,pa-headers
 traefik.http.routers.pa-options.service=pa-public
 
 traefik.http.middlewares.pa-strip.stripprefix.prefixes=/auth
-traefik.http.middlewares.pa-ratelimit.ratelimit.average=30
-traefik.http.middlewares.pa-ratelimit.ratelimit.period=1m
-traefik.http.middlewares.pa-ratelimit.ratelimit.burst=10
-traefik.http.middlewares.pa-inflight.inflightreq.amount=20
+
+# Global ceiling: one bucket for all callers.
+traefik.http.middlewares.pa-rl-global.ratelimit.average=50
+traefik.http.middlewares.pa-rl-global.ratelimit.period=1s
+traefik.http.middlewares.pa-rl-global.ratelimit.burst=100
+traefik.http.middlewares.pa-rl-global.ratelimit.sourcecriterion.requesthost=true
+
+# Per source IP, every route.
+traefik.http.middlewares.pa-rl-ip.ratelimit.average=60
+traefik.http.middlewares.pa-rl-ip.ratelimit.period=1m
+traefik.http.middlewares.pa-rl-ip.ratelimit.burst=30
+traefik.http.middlewares.pa-rl-ip.ratelimit.sourcecriterion.ipstrategy.depth=0
+
+# Per source IP, ceremony starts only.
+traefik.http.middlewares.pa-rl-options.ratelimit.average=20
+traefik.http.middlewares.pa-rl-options.ratelimit.period=1m
+traefik.http.middlewares.pa-rl-options.ratelimit.burst=10
+traefik.http.middlewares.pa-rl-options.ratelimit.sourcecriterion.ipstrategy.depth=0
+
+traefik.http.middlewares.pa-inflight.inflightreq.amount=10
 traefik.http.middlewares.pa-inflight.inflightreq.sourcecriterion.ipstrategy.depth=0
+
 traefik.http.middlewares.pa-headers.headers.stsseconds=31536000
 traefik.http.middlewares.pa-headers.headers.contenttypenosniff=true
 traefik.http.middlewares.pa-headers.headers.framedeny=true
 ```
 
-The rate-limit values are a starting point; tune them from real traffic. The
-browser helper builds its URLs from its own location, so the `/auth` prefix
-needs no setting in the service. `PA_ISSUER` should be the public URL,
-including the prefix.
+- **Values.** These are a starting point, to be tuned from real traffic. One
+  login uses two requests (`options`, then `verify`), plus the helper and the
+  JWKS, both of which are cached.
+- **`ipstrategy.depth=0`.** It takes the address of the TCP connection, which
+  is right when Traefik faces the Internet directly. Behind a CDN or a load
+  balancer, set `depth` or `excludedips` instead, or every user will share the
+  CDN's address.
+- **Prefix.** The browser helper loaded from the service derives its base URL
+  from its own location, so the `/auth` prefix needs no setting in the service.
+  `PA_ISSUER` should be the public URL, including the prefix.
+
+### Defences in the service itself
+
+Traefik's limits bound the request rate. Two things in the service keep each
+request cheap:
+
+- **Cheap checks first.** A `verify` request is refused before any signature
+  verification if:
+  - its body is over 64 KiB, not JSON, or has an unknown field;
+  - its `clientDataJSON` is malformed;
+  - its challenge is unknown, expired or already used.
+
+  So a flood of invented responses costs one JSON decode and one indexed
+  lookup each.
+- **Bounded state.** Expired challenges and tickets are purged. Above
+  `PA_MAX_CHALLENGES` live challenges, `options` answers `503` with code `unavailable`,
+  so the database cannot be filled faster than the purge empties it.
 
 ### Who does what
 
 | Traefik | Service |
 |---|---|
 | TLS termination and certificates | WebAuthn checks, including the origin check on `clientDataJSON` |
-| rate limits, in-flight limits | the challenge TTL and purge; the 64 KiB body limit |
+| rate limits (per IP and global), in-flight limits, on every route | cheap checks before cryptography; the challenge TTL, purge and cap; the 64 KiB body limit |
 | HSTS, `nosniff`, frame denial | CORS on the ceremony routes. Its allow-list is `PA_ORIGINS`, the list WebAuthn checks, so a second list kept in Traefik could drift from it. |
 | IP allow-list on the host entry point (#5) | authentication of the host on every host-facing request (#5) |
 | | the usage log of the browser helper |

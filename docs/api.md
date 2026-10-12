@@ -404,12 +404,15 @@ Every error has the same shape:
 | 413 | `request_too_large` | body over 64 KiB |
 | 415 | `unsupported_media_type` | `POST` without `Content-Type: application/json` |
 | 500 | `internal` | unexpected error |
+| 503 | `unavailable` | too many live challenges: retry later (`Retry-After` is set) |
 
 `message` is for humans and may change. All checks of a ceremony report
 `verification_failed` without saying which check failed; the reason is written
 to the service log.
 
-The service has no rate limiting of its own; it belongs to the reverse proxy.
+Request rates are limited by the reverse proxy (see
+[configuration.md](configuration.md#behind-traefik)); the service only caps the
+number of live challenges.
 
 ## Security properties
 
