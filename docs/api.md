@@ -416,6 +416,9 @@ number of live challenges.
 
 ## Security properties
 
+The security boundary, the threats and the deployment profiles are described
+in [security.md](security.md).
+
 | Property | How |
 |---|---|
 | Phishing resistance | origin checked against `PA_ORIGINS`, RP ID hash against `PA_RP_ID` |
