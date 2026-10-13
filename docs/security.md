@@ -137,6 +137,17 @@ any authenticator, hardware keys included (see [The browser](#the-browser)).
 So the environment does not change what a result token proves: it is an
 organisational measure, outside the service.
 
+OS policy reduces the risk without removing it:
+- application allow-listing (App Control for Business, AppLocker) blocks
+  unapproved executables, a portable browser included;
+- TPM-based device attestation (measured boot) vouches for the boot chain.
+
+Neither measures a signed browser that has been exploited at run time, and no
+standard passes such an attestation to a website: WebAuthn conveys the
+authenticator's attestation, never the browser's. Device-trust signals exist
+only within enterprise identity ecosystems, which the host may consult on its
+own, alongside the `assurance` claim.
+
 The result token carries the profile in its `assurance` claim, at registration
 and at every authentication.
 
