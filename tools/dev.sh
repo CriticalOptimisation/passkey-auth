@@ -54,4 +54,4 @@ return 0
 # --- Change History -------------------------------------------------------
 # | PR     | Summary                                                       |
 # |--------|---------------------------------------------------------------|
-# | #TBD   | containers for Go, npm and the e2e suite (issue #4)           |
+# | #12    | containers for Go, npm and the e2e suite                      |

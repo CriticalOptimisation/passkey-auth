@@ -58,3 +58,8 @@ func TestDatabaseHoldsPublicMaterialOnly(t *testing.T) {
 		t.Error("credential ID not found: the scan reads the wrong file")
 	}
 }
+
+// --- Change History -------------------------------------------------------
+// | PR     | Summary                                                       |
+// |--------|---------------------------------------------------------------|
+// | #12    | database holds public material only                           |

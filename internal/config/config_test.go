@@ -94,3 +94,8 @@ func TestRefused(t *testing.T) {
 		})
 	}
 }
+
+// --- Change History -------------------------------------------------------
+// | PR     | Summary                                                       |
+// |--------|---------------------------------------------------------------|
+// | #12    | defaults and refused configurations                           |

@@ -57,3 +57,8 @@ test("the helper is served to any origin", async ({ request }) => {
   expect(res.headers()["access-control-allow-origin"]).toBe("*");
   expect(res.headers()["content-type"]).toMatch(/^text\/javascript/);
 });
+
+// --- Change History -------------------------------------------------------
+// | PR     | Summary                                                       |
+// |--------|---------------------------------------------------------------|
+// | #12    | replay, tampering, origin, missing UV                         |

@@ -93,3 +93,8 @@ func or(v, def string) string {
 	}
 	return v
 }
+
+// --- Change History -------------------------------------------------------
+// | PR     | Summary                                                       |
+// |--------|---------------------------------------------------------------|
+// | #12    | configuration from the environment                            |

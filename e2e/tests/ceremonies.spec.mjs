@@ -74,3 +74,8 @@ test("a bundled copy of the helper works with an explicit baseURL", async ({ pag
   const claims = verifyToken(res.token, await fetchJWKS(baseURL), { issuer: ISSUER, audience: AUDIENCE });
   expect(claims.ceremony).toBe("registration");
 });
+
+// --- Change History -------------------------------------------------------
+// | PR     | Summary                                                       |
+// |--------|---------------------------------------------------------------|
+// | #12    | ceremonies for both authenticator classes                     |

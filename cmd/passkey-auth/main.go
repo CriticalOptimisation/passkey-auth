@@ -70,3 +70,8 @@ func run(log *slog.Logger) error {
 	}
 	return nil
 }
+
+// --- Change History -------------------------------------------------------
+// | PR     | Summary                                                       |
+// |--------|---------------------------------------------------------------|
+// | #12    | service entry point, graceful shutdown                        |

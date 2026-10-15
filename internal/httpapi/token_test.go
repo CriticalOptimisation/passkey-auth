@@ -148,3 +148,8 @@ func TestTokenExpires(t *testing.T) {
 		t.Error("token still valid after its lifetime")
 	}
 }
+
+// --- Change History -------------------------------------------------------
+// | PR     | Summary                                                       |
+// |--------|---------------------------------------------------------------|
+// | #12    | JWKS, tampered and expired tokens                             |

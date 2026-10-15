@@ -376,3 +376,8 @@ func random(n int) []byte {
 	}
 	return b
 }
+
+// --- Change History -------------------------------------------------------
+// | PR     | Summary                                                       |
+// |--------|---------------------------------------------------------------|
+// | #12    | software authenticator that can forge ceremonies              |

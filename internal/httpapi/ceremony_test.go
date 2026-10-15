@@ -361,3 +361,8 @@ func uuid(b [16]byte) string {
 	}
 	return string(out)
 }
+
+// --- Change History -------------------------------------------------------
+// | PR     | Summary                                                       |
+// |--------|---------------------------------------------------------------|
+// | #12    | ceremony and negative tests, both classes                     |

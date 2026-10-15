@@ -79,3 +79,8 @@ export const test = base.extend({
 export { expect };
 
 export const newNonce = () => Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url");
+
+// --- Change History -------------------------------------------------------
+// | PR     | Summary                                                       |
+// |--------|---------------------------------------------------------------|
+// | #12    | virtual authenticators, test routes, helper driver            |

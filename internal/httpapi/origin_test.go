@@ -90,3 +90,8 @@ func TestInvalidOriginListIsRefused(t *testing.T) {
 		st.Close()
 	}
 }
+
+// --- Change History -------------------------------------------------------
+// | PR     | Summary                                                       |
+// |--------|---------------------------------------------------------------|
+// | #12    | origin normalisation and cross-origin frames                  |

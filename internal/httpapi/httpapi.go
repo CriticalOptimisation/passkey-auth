@@ -356,3 +356,8 @@ func (r *recorder) WriteHeader(code int) {
 }
 
 func b64(b []byte) string { return base64.RawURLEncoding.EncodeToString(b) }
+
+// --- Change History -------------------------------------------------------
+// | PR     | Summary                                                       |
+// |--------|---------------------------------------------------------------|
+// | #12    | public routes, strict JSON, CORS, errors                      |

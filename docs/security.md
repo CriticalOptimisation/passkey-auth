@@ -238,3 +238,11 @@ attestation, unless the deployment sets a minimum profile (#9).
 - Compromise of the host backend: it can issue tickets and accept tokens at
   will.
 - Physical coercion of the user.
+
+<!--
+Change History
+
+| PR  | Summary |
+|-----|---------|
+| #12 | security boundary, threats, assurance profiles |
+-->

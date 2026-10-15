@@ -10,3 +10,8 @@ const Version = "1"
 //
 //go:embed passkey-auth.js
 var Helper []byte
+
+// --- Change History -------------------------------------------------------
+// | PR     | Summary                                                       |
+// |--------|---------------------------------------------------------------|
+// | #12    | embeds the browser helper                                     |

@@ -122,3 +122,8 @@ function credentialJSON(c) {
     clientExtensionResults: c.getClientExtensionResults(),
   };
 }
+
+// --- Change History -------------------------------------------------------
+// | PR     | Summary                                                       |
+// |--------|---------------------------------------------------------------|
+// | #12    | browser helper: register, authenticate, baseURL               |

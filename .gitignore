@@ -38,3 +38,8 @@ coverage/
 .idea/
 .DS_Store
 Thumbs.db
+
+# --- Change History -------------------------------------------------------
+# | PR     | Summary                                                       |
+# |--------|---------------------------------------------------------------|
+# | #12    | Go and e2e outputs; Node kept for e2e only                    |

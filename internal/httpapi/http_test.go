@@ -115,3 +115,8 @@ func TestNothingUnderWellKnown(t *testing.T) {
 		mustFail(t, e.do(http.MethodGet, path, nil, nil), http.StatusNotFound, "not_found")
 	}
 }
+
+// --- Change History -------------------------------------------------------
+// | PR     | Summary                                                       |
+// |--------|---------------------------------------------------------------|
+// | #12    | helper, CORS, error envelope, no /.well-known                 |

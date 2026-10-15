@@ -38,3 +38,8 @@ CREATE TABLE IF NOT EXISTS challenges (
 	nonce       TEXT    NOT NULL
 ) STRICT;
 CREATE INDEX IF NOT EXISTS challenges_by_expiry ON challenges (expires_at);
+
+-- --- Change History -------------------------------------------------------
+-- | PR     | Summary                                                       |
+-- |--------|---------------------------------------------------------------|
+-- | #12    | users, credentials, tickets, challenges                       |

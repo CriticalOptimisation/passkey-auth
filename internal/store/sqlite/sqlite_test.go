@@ -57,3 +57,8 @@ func TestReopen(t *testing.T) {
 		t.Fatalf("after reopen: %q, %v", acc, err)
 	}
 }
+
+// --- Change History -------------------------------------------------------
+// | PR     | Summary                                                       |
+// |--------|---------------------------------------------------------------|
+// | #12    | store contract on SQLite, URI paths, reopen                   |

@@ -69,3 +69,11 @@ belong to the controller and are light:
 - Passkeys synced by a platform (Google, Apple) are stored by that provider
   under the user's own agreement with it. That storage is not processing by
   the host or by this service.
+
+<!--
+Change History
+
+| PR  | Summary |
+|-----|---------|
+| #12 | pointers to the docs; personal data (GDPR) section |
+-->

@@ -169,3 +169,8 @@ func Run(t *testing.T, open func(t *testing.T) store.Store) {
 		}
 	})
 }
+
+// --- Change History -------------------------------------------------------
+// | PR     | Summary                                                       |
+// |--------|---------------------------------------------------------------|
+// | #12    | contract tests for any store backend                          |

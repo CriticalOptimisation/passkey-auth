@@ -223,3 +223,11 @@ nowhere else:
   the tests import the browser helper.
 
 Release builds never carry this tag.
+
+<!--
+Change History
+
+| PR  | Summary |
+|-----|---------|
+| #12 | variables, keys, logs, deployment behind Traefik |
+-->

@@ -91,3 +91,8 @@ type Store interface {
 
 	Close() error
 }
+
+// --- Change History -------------------------------------------------------
+// | PR     | Summary                                                       |
+// |--------|---------------------------------------------------------------|
+// | #12    | storage contract and domain types                             |

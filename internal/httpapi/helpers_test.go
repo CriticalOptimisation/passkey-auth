@@ -299,3 +299,8 @@ func random(n int) []byte {
 }
 
 func ptr[T any](v T) *T { return &v }
+
+// --- Change History -------------------------------------------------------
+// | PR     | Summary                                                       |
+// |--------|---------------------------------------------------------------|
+// | #12    | test service, HTTP and JWKS-only token helpers                |

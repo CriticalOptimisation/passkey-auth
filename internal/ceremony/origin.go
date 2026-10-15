@@ -76,3 +76,8 @@ func withinRPID(origin, rpID string) bool {
 	h := u.Hostname()
 	return h == rpID || strings.HasSuffix(h, "."+rpID)
 }
+
+// --- Change History -------------------------------------------------------
+// | PR     | Summary                                                       |
+// |--------|---------------------------------------------------------------|
+// | #12    | normalisation of the allowed origins                          |

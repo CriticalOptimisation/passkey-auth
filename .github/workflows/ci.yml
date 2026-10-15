@@ -48,3 +48,8 @@ jobs:
         working-directory: e2e
       - run: npx playwright test
         working-directory: e2e
+
+# --- Change History -------------------------------------------------------
+# | PR     | Summary                                                       |
+# |--------|---------------------------------------------------------------|
+# | #12    | Go vet/test and Playwright e2e, actions pinned by SHA         |

@@ -408,3 +408,8 @@ func random(n int) []byte {
 	}
 	return b
 }
+
+// --- Change History -------------------------------------------------------
+// | PR     | Summary                                                       |
+// |--------|---------------------------------------------------------------|
+// | #12    | options and verification of both ceremonies                   |

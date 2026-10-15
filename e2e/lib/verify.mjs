@@ -34,3 +34,8 @@ export function verifyToken(token, jwks, { issuer, audience, now = Date.now() / 
   if (!(claims.exp > now - 5)) throw new Error("expired");
   return claims;
 }
+
+// --- Change History -------------------------------------------------------
+// | PR     | Summary                                                       |
+// |--------|---------------------------------------------------------------|
+// | #12    | independent token verifier (Node crypto + JWKS)               |

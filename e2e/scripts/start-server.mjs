@@ -37,3 +37,8 @@ for (const signal of ["SIGINT", "SIGTERM"]) {
   process.on(signal, () => child.kill(signal));
 }
 child.on("exit", (code, signal) => process.exit(code ?? (signal ? 1 : 0)));
+
+// --- Change History -------------------------------------------------------
+// | PR     | Summary                                                       |
+// |--------|---------------------------------------------------------------|
+// | #12    | starts the e2e build with a fresh key and database            |

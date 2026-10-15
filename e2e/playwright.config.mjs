@@ -35,3 +35,8 @@ export default defineConfig({
     },
   ],
 });
+
+// --- Change History -------------------------------------------------------
+// | PR     | Summary                                                       |
+// |--------|---------------------------------------------------------------|
+// | #12    | two authenticator projects, two service instances             |

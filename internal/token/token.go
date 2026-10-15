@@ -170,3 +170,8 @@ func readPEM(path, typ string) ([]byte, error) {
 	}
 	return block.Bytes, nil
 }
+
+// --- Change History -------------------------------------------------------
+// | PR     | Summary                                                       |
+// |--------|---------------------------------------------------------------|
+// | #12    | Ed25519 result tokens, JWKS, key loading                      |

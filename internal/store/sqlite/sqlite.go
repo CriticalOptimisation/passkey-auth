@@ -209,3 +209,8 @@ func conflict(err error) error {
 	}
 	return err
 }
+
+// --- Change History -------------------------------------------------------
+// | PR     | Summary                                                       |
+// |--------|---------------------------------------------------------------|
+// | #12    | SQLite implementation of the store                            |

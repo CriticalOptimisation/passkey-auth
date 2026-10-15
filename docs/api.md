@@ -437,3 +437,11 @@ in [security.md](security.md).
 | No enumeration | discoverable credentials, empty `allowCredentials`, random user handles |
 | Forgery towards the host | result token signed with Ed25519, short-lived, audience-bound, nonce-bound |
 | Database theft | only public material is stored: credential public keys, counters, flags, user handles, account references and challenges. Registration tickets are stored as SHA-256 hashes, so a stolen database yields no usable ticket. The signing key lives in a mounted file and in memory only. |
+
+<!--
+Change History
+
+| PR  | Summary |
+|-----|---------|
+| #12 | API contract: ceremonies, token, JWKS, helper, errors |
+-->
