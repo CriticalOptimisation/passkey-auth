@@ -27,7 +27,9 @@ var _ store.Store = (*Store)(nil)
 
 // Open opens or creates the database at path and applies the schema.
 func Open(ctx context.Context, path string) (*Store, error) {
-	dsn := "file:" + path + "?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)&_pragma=synchronous(NORMAL)"
+	// The path goes into a file: URI, where %, ? and # are special.
+	escaped := strings.NewReplacer("%", "%25", "?", "%3f", "#", "%23").Replace(path)
+	dsn := "file:" + escaped + "?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)&_pragma=synchronous(NORMAL)"
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, err
