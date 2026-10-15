@@ -240,7 +240,7 @@ type claims struct {
 // the service, as a host would, and returns its claims.
 func (e *env) verifyToken(token string) (claims, error) {
 	e.t.Helper()
-	r := e.do(http.MethodGet, "/.well-known/jwks.json", nil, nil)
+	r := e.do(http.MethodGet, "/v1/jwks.json", nil, nil)
 	var set jose.JSONWebKeySet
 	if err := json.Unmarshal(mustOK(e.t, r), &set); err != nil {
 		e.t.Fatalf("jwks: %v", err)

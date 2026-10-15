@@ -37,7 +37,7 @@ func TestJWKS(t *testing.T) {
 					c.PreviousKey = previous.Public().(ed25519.PublicKey)
 				}
 			})
-			r := e.do(http.MethodGet, "/.well-known/jwks.json", nil, nil)
+			r := e.do(http.MethodGet, "/v1/jwks.json", nil, nil)
 			mustOK(t, r)
 			if got := r.Header.Get("Cache-Control"); got != "public, max-age=300" {
 				t.Errorf("Cache-Control = %q", got)

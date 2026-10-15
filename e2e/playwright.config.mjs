@@ -23,13 +23,13 @@ export default defineConfig({
   webServer: [
     {
       command: `node scripts/start-server.mjs ${MAIN} http://localhost:${MAIN}`,
-      url: `http://localhost:${MAIN}/.well-known/jwks.json`,
+      url: `http://localhost:${MAIN}/v1/jwks.json`,
       reuseExistingServer: false,
       stdout: "pipe",
     },
     {
       command: `node scripts/start-server.mjs ${OTHER} https://elsewhere.example`,
-      url: `http://localhost:${OTHER}/.well-known/jwks.json`,
+      url: `http://localhost:${OTHER}/v1/jwks.json`,
       reuseExistingServer: false,
       stdout: "pipe",
     },

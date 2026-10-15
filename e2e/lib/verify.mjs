@@ -5,7 +5,7 @@ import { createPublicKey, verify } from "node:crypto";
 const b64url = (s) => Buffer.from(s, "base64url");
 
 export async function fetchJWKS(baseURL) {
-  const res = await fetch(new URL("/.well-known/jwks.json", baseURL));
+  const res = await fetch(new URL("v1/jwks.json", baseURL.endsWith("/") ? baseURL : `${baseURL}/`));
   if (!res.ok) throw new Error(`JWKS: HTTP ${res.status}`);
   return res.json();
 }

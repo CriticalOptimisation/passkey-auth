@@ -106,3 +106,12 @@ func TestErrorEnvelope(t *testing.T) {
 		})
 	}
 }
+
+// The service serves nothing under /.well-known/: the domain root belongs to
+// the host's site.
+func TestNothingUnderWellKnown(t *testing.T) {
+	e := newEnv(t)
+	for _, path := range []string{"/.well-known/jwks.json", "/.well-known/webauthn"} {
+		mustFail(t, e.do(http.MethodGet, path, nil, nil), http.StatusNotFound, "not_found")
+	}
+}
