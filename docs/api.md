@@ -41,7 +41,7 @@ browser                         passkey-auth                      host backend
    |----------------------------------------->|                        |
    |<--------------------------- {token} -----|                        |
    | token ------------------------------------------------------------>|
-   |                                          |<-- GET /.well-known/jwks.json (cached)
+   |                                          |<-- GET /v1/jwks.json (cached)
 ```
 
 **Topology.** One deployment serves one relying party (RP ID). The RP ID is the
@@ -304,7 +304,14 @@ The token is accepted once: the host may record `jti` until `exp`.
 
 ## Keys
 
-### `GET /.well-known/jwks.json`
+### `GET /v1/jwks.json`
+
+Like every route, it is relative to the service root: behind the reverse
+proxy's `/auth` prefix, hosts fetch `https://example.com/auth/v1/jwks.json`,
+and the proxy strips `/auth`. Hosts are given this URL as configuration. The
+service serves nothing under `/.well-known/`: the domain root belongs to
+whoever deploys the host's site, and passkey standards define no well-known
+URI for this key.
 
 Response `200`, `Cache-Control: public, max-age=300`,
 `Access-Control-Allow-Origin: *`:
