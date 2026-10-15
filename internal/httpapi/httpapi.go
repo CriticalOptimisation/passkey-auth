@@ -5,8 +5,8 @@ package httpapi
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"crypto/ed25519"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
