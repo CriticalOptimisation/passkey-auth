@@ -24,7 +24,12 @@ const (
 	KindAuthentication Kind = "authentication"
 )
 
-// Ticket is a one-time registration ticket. Only its SHA-256 hash is stored.
+// AAGUIDBytes is the length of an authenticator's AAGUID.
+const AAGUIDBytes = 16
+
+// Ticket is a one-time registration ticket, as the store keeps it: Hash is
+// the SHA-256 of the ticket, never the ticket itself, which the hash cannot
+// give back.
 type Ticket struct {
 	Hash        []byte
 	Account     string

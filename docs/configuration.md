@@ -197,7 +197,8 @@ request cheap:
 
   So a flood of invented responses costs one JSON decode and one indexed
   lookup each.
-- **Bounded state.** Expired challenges and tickets are purged. Above
+- **Bounded state.** Expired challenges and tickets are purged when a
+  challenge is issued, at most once every 30 seconds. Above
   `PA_MAX_CHALLENGES` live challenges, `options` answers `503` with code `unavailable`,
   so the database cannot be filled faster than the purge empties it.
 

@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/go-webauthn/webauthn/protocol"
+	"github.com/go-webauthn/webauthn/protocol/webauthncose"
 	"github.com/go-webauthn/webauthn/webauthn"
 
 	"github.com/CriticalOptimisation/passkey-auth/internal/store"
@@ -49,6 +50,28 @@ func refuse(code, format string, args ...any) *Error {
 
 // AssurancePasskey is the only profile until the attestation policy of #9.
 const AssurancePasskey = "passkey"
+
+// Sizes and limits of docs/api.md, in bytes unless stated.
+const (
+	TicketBytes     = 32 // random bytes of a registration ticket
+	ChallengeBytes  = 32 // random bytes of a challenge
+	UserHandleBytes = 64 // random bytes of a user handle
+	MaxAccountBytes = 256
+	MaxDisplayBytes = 256
+	MinNonceBytes   = 16 // host nonce, once decoded
+	MaxNonceBytes   = 64
+)
+
+// PurgeInterval is the least time between two purges of expired tickets and
+// challenges; a purge runs when a challenge is issued.
+const PurgeInterval = 30 * time.Second
+
+// uuidDashes are the byte offsets of the dashes of an RFC 9562 UUID string
+// (8-4-4-4-12 hexadecimal digits).
+var uuidDashes = []int{4, 6, 8, 10}
+
+// publicKey is the only credential type of WebAuthn.
+const publicKey = string(protocol.PublicKeyCredentialType)
 
 // Config is what the ceremonies need from the service configuration.
 type Config struct {
@@ -85,9 +108,9 @@ type Ceremonies struct {
 
 // credParams: ES256, EdDSA, RS256, in this order of preference.
 var credParams = []protocol.CredentialParameter{
-	{Type: protocol.PublicKeyCredentialType, Algorithm: -7},
-	{Type: protocol.PublicKeyCredentialType, Algorithm: -8},
-	{Type: protocol.PublicKeyCredentialType, Algorithm: -257},
+	{Type: protocol.PublicKeyCredentialType, Algorithm: webauthncose.AlgES256},
+	{Type: protocol.PublicKeyCredentialType, Algorithm: webauthncose.AlgEdDSA},
+	{Type: protocol.PublicKeyCredentialType, Algorithm: webauthncose.AlgRS256},
 }
 
 // New returns the ceremonies for a configuration and a store.
@@ -108,7 +131,9 @@ func New(cfg Config, st store.Store) (*Ceremonies, error) {
 	return &Ceremonies{cfg: cfg, st: st, wa: wa}, nil
 }
 
-// HashTicket is how tickets are stored: SHA-256 of the ticket string.
+// HashTicket is the SHA-256 of the ticket string. The ticket itself is never
+// stored: only this hash is, as the lookup key of the ticket's row, and it
+// cannot give the ticket back.
 func HashTicket(ticket string) []byte {
 	h := sha256.Sum256([]byte(ticket))
 	return h[:]
@@ -116,13 +141,13 @@ func HashTicket(ticket string) []byte {
 
 // IssueTicket creates a registration ticket for account.
 func (c *Ceremonies) IssueTicket(ctx context.Context, account, displayName string) (string, error) {
-	if account == "" || len(account) > 256 {
-		return "", errors.New("ceremony: account must be 1 to 256 bytes")
+	if account == "" || len(account) > MaxAccountBytes {
+		return "", fmt.Errorf("ceremony: account must be 1 to %d bytes", MaxAccountBytes)
 	}
-	if displayName == "" || len(displayName) > 256 {
-		return "", errors.New("ceremony: display name must be 1 to 256 bytes")
+	if displayName == "" || len(displayName) > MaxDisplayBytes {
+		return "", fmt.Errorf("ceremony: display name must be 1 to %d bytes", MaxDisplayBytes)
 	}
-	ticket := b64(random(32))
+	ticket := b64(random(TicketBytes))
 	err := c.st.CreateTicket(ctx, store.Ticket{
 		Hash: HashTicket(ticket), Account: account, DisplayName: displayName,
 		ExpiresAt: c.cfg.Now().Add(c.cfg.TicketTTL),
@@ -134,7 +159,7 @@ func (c *Ceremonies) IssueTicket(ctx context.Context, account, displayName strin
 // challenges, and stores a fresh challenge.
 func (c *Ceremonies) newChallenge(ctx context.Context, ch store.Challenge) ([]byte, error) {
 	now := c.cfg.Now()
-	if last := c.last.Load(); now.UnixMilli()-last > 30_000 || now.UnixMilli() < last {
+	if last := c.last.Load(); now.UnixMilli()-last > PurgeInterval.Milliseconds() || now.UnixMilli() < last {
 		c.last.Store(now.UnixMilli())
 		if err := c.st.Purge(ctx, now); err != nil {
 			return nil, err
@@ -147,7 +172,7 @@ func (c *Ceremonies) newChallenge(ctx context.Context, ch store.Challenge) ([]by
 	if n >= c.cfg.MaxChallenges {
 		return nil, refuse(CodeUnavailable, "%d live challenges, cap %d", n, c.cfg.MaxChallenges)
 	}
-	ch.Value = random(32)
+	ch.Value = random(ChallengeBytes)
 	ch.ExpiresAt = now.Add(c.cfg.ChallengeTTL)
 	if err := c.st.PutChallenge(ctx, ch); err != nil {
 		return nil, err
@@ -172,7 +197,7 @@ func (c *Ceremonies) RegistrationOptions(ctx context.Context, ticket string) ([]
 	if !c.cfg.Now().Before(t.ExpiresAt) {
 		return nil, refuse(CodeTicketInvalid, "expired ticket")
 	}
-	handle, err := c.st.EnsureUser(ctx, t.Account, random(64), c.cfg.Now())
+	handle, err := c.st.EnsureUser(ctx, t.Account, random(UserHandleBytes), c.cfg.Now())
 	if err != nil {
 		return nil, err
 	}
@@ -182,7 +207,7 @@ func (c *Ceremonies) RegistrationOptions(ctx context.Context, ticket string) ([]
 	}
 	exclude := []descriptor{}
 	for _, cr := range existing {
-		exclude = append(exclude, descriptor{Type: "public-key", ID: b64(cr.ID), Transports: cr.Transports})
+		exclude = append(exclude, descriptor{Type: publicKey, ID: b64(cr.ID), Transports: cr.Transports})
 	}
 	challenge, err := c.newChallenge(ctx, store.Challenge{Kind: store.KindRegistration, Account: t.Account, UserHandle: handle})
 	if err != nil {
@@ -190,7 +215,7 @@ func (c *Ceremonies) RegistrationOptions(ctx context.Context, ticket string) ([]
 	}
 	params := []map[string]any{}
 	for _, p := range credParams {
-		params = append(params, map[string]any{"type": "public-key", "alg": p.Algorithm})
+		params = append(params, map[string]any{"type": publicKey, "alg": p.Algorithm})
 	}
 	return json.Marshal(map[string]any{"publicKey": map[string]any{
 		"rp":                 map[string]string{"id": c.cfg.RPID, "name": c.cfg.RPName},
@@ -200,17 +225,19 @@ func (c *Ceremonies) RegistrationOptions(ctx context.Context, ticket string) ([]
 		"timeout":            c.cfg.ChallengeTTL.Milliseconds(),
 		"excludeCredentials": exclude,
 		"authenticatorSelection": map[string]any{
-			"residentKey": "required", "requireResidentKey": true, "userVerification": "required",
+			"residentKey":        protocol.ResidentKeyRequirementRequired,
+			"requireResidentKey": true,
+			"userVerification":   protocol.VerificationRequired,
 		},
-		"attestation": "direct",
+		"attestation": protocol.PreferDirectAttestation,
 	}})
 }
 
 // AuthenticationOptions returns the request options for a host nonce.
 func (c *Ceremonies) AuthenticationOptions(ctx context.Context, nonce string) ([]byte, error) {
 	raw, err := base64.RawURLEncoding.Strict().DecodeString(nonce)
-	if err != nil || len(raw) < 16 || len(raw) > 64 {
-		return nil, refuse(CodeInvalidRequest, "nonce must be base64url of 16 to 64 bytes")
+	if err != nil || len(raw) < MinNonceBytes || len(raw) > MaxNonceBytes {
+		return nil, refuse(CodeInvalidRequest, "nonce must be base64url of %d to %d bytes", MinNonceBytes, MaxNonceBytes)
 	}
 	challenge, err := c.newChallenge(ctx, store.Challenge{Kind: store.KindAuthentication, Nonce: nonce})
 	if err != nil {
@@ -221,7 +248,7 @@ func (c *Ceremonies) AuthenticationOptions(ctx context.Context, nonce string) ([
 		"timeout":          c.cfg.ChallengeTTL.Milliseconds(),
 		"rpId":             c.cfg.RPID,
 		"allowCredentials": []descriptor{},
-		"userVerification": "required",
+		"userVerification": protocol.VerificationRequired,
 	}})
 }
 
@@ -375,13 +402,13 @@ func (u *user) WebAuthnCredentials() []webauthn.Credential { return u.creds }
 
 // UUID formats an AAGUID; all zeros when absent.
 func UUID(b []byte) string {
-	if len(b) != 16 {
-		b = make([]byte, 16)
+	if len(b) != store.AAGUIDBytes {
+		b = make([]byte, store.AAGUIDBytes)
 	}
 	const hex = "0123456789abcdef"
 	var sb strings.Builder
 	for i, x := range b {
-		if i == 4 || i == 6 || i == 8 || i == 10 {
+		if slices.Contains(uuidDashes, i) {
 			sb.WriteByte('-')
 		}
 		sb.WriteByte(hex[x>>4])

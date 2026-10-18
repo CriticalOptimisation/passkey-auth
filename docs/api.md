@@ -383,7 +383,8 @@ the user aborted the ceremony (`cause` holds the browser's `DOMException`).
 - The `/v1/registration/*` and `/v1/authentication/*` routes answer CORS
   requests only from the origins listed in `PA_ORIGINS`: the request `Origin` is
   echoed exactly, with `Vary: Origin`, and credentials are never allowed.
-  Preflight requests (`OPTIONS`) are answered for `POST` with `Content-Type`.
+  Preflight requests (`OPTIONS`) are answered for `POST` with `Content-Type`,
+  and may be cached for 10 minutes (`Access-Control-Max-Age: 600`).
   Other origins receive no CORS header, and the browser blocks the response.
 - In a same-site deployment these headers are unused. They become useful with
   Related Origin Requests, when another application on a related origin calls
@@ -413,7 +414,7 @@ Every error has the same shape:
 | 413 | `request_too_large` | body over 64 KiB |
 | 415 | `unsupported_media_type` | `POST` without `Content-Type: application/json` |
 | 500 | `internal` | unexpected error |
-| 503 | `unavailable` | too many live challenges: retry later (`Retry-After` is set) |
+| 503 | `unavailable` | too many live challenges: retry later (`Retry-After: 60`) |
 
 `message` is for humans and may change. All checks of a ceremony report
 `verification_failed` without saying which check failed; the reason is written
@@ -436,7 +437,7 @@ in [security.md](security.md).
 | Cloned authenticators | counter regression rejected |
 | No enumeration | discoverable credentials, empty `allowCredentials`, random user handles |
 | Forgery towards the host | result token signed with Ed25519, short-lived, audience-bound, nonce-bound |
-| Database theft | only public material is stored: credential public keys, counters, flags, user handles, account references and challenges. Registration tickets are stored as SHA-256 hashes, so a stolen database yields no usable ticket. The signing key lives in a mounted file and in memory only. |
+| Database theft | only public material is stored: credential public keys, counters, flags, user handles, account references and challenges. Registration tickets are never stored: each row holds only the SHA-256 hash of its ticket, as a lookup key, and a hash cannot give the ticket back, so a stolen database yields no usable ticket. The signing key lives in a mounted file and in memory only. |
 
 <!--
 Change History

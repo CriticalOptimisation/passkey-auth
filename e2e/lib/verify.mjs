@@ -4,6 +4,12 @@ import { createPublicKey, verify } from "node:crypto";
 
 const b64url = (s) => Buffer.from(s, "base64url");
 
+// Clock skew, in seconds, allowed on "exp", as docs/api.md asks of hosts.
+export const CLOCK_SKEW_SECONDS = 5;
+
+// A compact JWS is header.payload.signature.
+const COMPACT_JWS_PARTS = 3;
+
 export async function fetchJWKS(baseURL) {
   const res = await fetch(new URL("v1/jwks.json", baseURL.endsWith("/") ? baseURL : `${baseURL}/`));
   if (!res.ok) throw new Error(`JWKS: HTTP ${res.status}`);
@@ -18,7 +24,7 @@ export async function fetchJWKS(baseURL) {
  */
 export function verifyToken(token, jwks, { issuer, audience, now = Date.now() / 1000 }) {
   const parts = token.split(".");
-  if (parts.length !== 3) throw new Error("not a compact JWS");
+  if (parts.length !== COMPACT_JWS_PARTS) throw new Error("not a compact JWS");
   const [h, p, s] = parts;
   const header = JSON.parse(b64url(h).toString("utf8"));
   if (header.alg !== "EdDSA") throw new Error(`alg ${header.alg}`);
@@ -31,7 +37,7 @@ export function verifyToken(token, jwks, { issuer, audience, now = Date.now() / 
   if (claims.iss !== issuer) throw new Error(`iss ${claims.iss}`);
   const aud = Array.isArray(claims.aud) ? claims.aud : [claims.aud];
   if (!aud.includes(audience)) throw new Error(`aud ${claims.aud}`);
-  if (!(claims.exp > now - 5)) throw new Error("expired");
+  if (!(claims.exp > now - CLOCK_SKEW_SECONDS)) throw new Error("expired");
   return claims;
 }
 

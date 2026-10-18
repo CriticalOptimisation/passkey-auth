@@ -21,6 +21,9 @@ import (
 // Type is the JOSE "typ" header of every result token.
 const Type = "passkey-result+jwt"
 
+// jtiBytes is the number of random bytes of a token's "jti".
+const jtiBytes = 16
+
 // Claims are the service-specific claims of a result token (docs/api.md).
 type Claims struct {
 	Ceremony  string `json:"ceremony"`
@@ -72,7 +75,7 @@ func NewIssuer(issuer, audience string, ttl time.Duration, key ed25519.PrivateKe
 
 // Sign returns a compact JWS for subject with the given claims, issued at now.
 func (i *Issuer) Sign(subject string, c Claims, now time.Time) (string, error) {
-	jti := make([]byte, 16)
+	jti := make([]byte, jtiBytes)
 	if _, err := rand.Read(jti); err != nil {
 		return "", err
 	}

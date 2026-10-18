@@ -78,7 +78,10 @@ export const test = base.extend({
 
 export { expect };
 
-export const newNonce = () => Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url");
+// Random bytes of a host nonce: within the 16 to 64 of docs/api.md.
+export const NONCE_BYTES = 32;
+
+export const newNonce = () => Buffer.from(crypto.getRandomValues(new Uint8Array(NONCE_BYTES))).toString("base64url");
 
 // --- Change History -------------------------------------------------------
 // | PR     | Summary                                                       |

@@ -16,6 +16,17 @@ import (
 	"github.com/CriticalOptimisation/passkey-auth/internal/store/sqlite"
 )
 
+// Timeouts of the HTTP server. Request bodies are small (httpapi.MaxBodyKiB),
+// so a slow client is cut off early.
+const (
+	readHeaderTimeout = 5 * time.Second
+	readTimeout       = 10 * time.Second
+	writeTimeout      = 10 * time.Second
+	idleTimeout       = 60 * time.Second
+	// shutdownTimeout is how long in-flight requests get after SIGTERM.
+	shutdownTimeout = 10 * time.Second
+)
+
 // wrap adds routes around the public API; the e2e build replaces it.
 var wrap = func(_ *httpapi.Server, h http.Handler) http.Handler { return h }
 
@@ -49,10 +60,10 @@ func run(log *slog.Logger) error {
 	srv := &http.Server{
 		Addr:              settings.Listen,
 		Handler:           wrap(api, api),
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       10 * time.Second,
-		WriteTimeout:      10 * time.Second,
-		IdleTimeout:       60 * time.Second,
+		ReadHeaderTimeout: readHeaderTimeout,
+		ReadTimeout:       readTimeout,
+		WriteTimeout:      writeTimeout,
+		IdleTimeout:       idleTimeout,
 	}
 	errc := make(chan error, 1)
 	go func() { errc <- srv.ListenAndServe() }()
@@ -63,7 +74,7 @@ func run(log *slog.Logger) error {
 		return err
 	case <-ctx.Done():
 	}
-	shutdown, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	shutdown, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 	if err := srv.Shutdown(shutdown); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return err

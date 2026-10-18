@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
+	"strconv"
 	"time"
 
 	"github.com/CriticalOptimisation/passkey-auth/internal/ceremony"
@@ -24,8 +25,25 @@ import (
 	"github.com/CriticalOptimisation/passkey-auth/web"
 )
 
-// maxBody is the request body limit of docs/api.md.
-const maxBody = 64 << 10
+// Limits and defaults of docs/api.md and docs/configuration.md.
+const (
+	MaxBodyKiB = 64               // request body limit, in KiB
+	maxBody    = MaxBodyKiB << 10 // the same, in bytes
+
+	DefaultChallengeTTL  = 5 * time.Minute
+	DefaultTicketTTL     = 15 * time.Minute
+	DefaultTokenTTL      = 60 * time.Second
+	MaxTokenTTL          = 5 * time.Minute
+	DefaultMaxChallenges = 100_000
+
+	// publicMaxAge is how long clients and proxies may cache the JWKS and
+	// the browser helper.
+	publicMaxAge = 5 * time.Minute
+	// preflightMaxAge is how long a browser may cache a CORS preflight.
+	preflightMaxAge = 10 * time.Minute
+	// retryAfter is the Retry-After of a 503 unavailable.
+	retryAfter = 60 * time.Second
+)
 
 // Config of the public API. Zero durations and counts take the defaults of
 // docs/configuration.md.
@@ -74,16 +92,16 @@ func New(cfg Config, st store.Store) (*Server, error) {
 		cfg.RPName = cfg.RPID
 	}
 	if cfg.ChallengeTTL == 0 {
-		cfg.ChallengeTTL = 5 * time.Minute
+		cfg.ChallengeTTL = DefaultChallengeTTL
 	}
 	if cfg.TicketTTL == 0 {
-		cfg.TicketTTL = 15 * time.Minute
+		cfg.TicketTTL = DefaultTicketTTL
 	}
 	if cfg.TokenTTL == 0 {
-		cfg.TokenTTL = 60 * time.Second
+		cfg.TokenTTL = DefaultTokenTTL
 	}
 	if cfg.MaxChallenges == 0 {
-		cfg.MaxChallenges = 100000
+		cfg.MaxChallenges = DefaultMaxChallenges
 	}
 	if cfg.Now == nil {
 		cfg.Now = time.Now
@@ -143,7 +161,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 			if r.Method == http.MethodOptions {
 				w.Header().Set("Access-Control-Allow-Methods", "POST")
 				w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-				w.Header().Set("Access-Control-Max-Age", "600")
+				w.Header().Set("Access-Control-Max-Age", seconds(preflightMaxAge))
 			}
 		}
 		if r.Method == http.MethodOptions {
@@ -168,7 +186,7 @@ func decode(w http.ResponseWriter, r *http.Request, v any) ([]byte, bool) {
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxBody))
 	var tooLarge *http.MaxBytesError
 	if errors.As(err, &tooLarge) {
-		writeError(w, http.StatusRequestEntityTooLarge, "request_too_large", "the body exceeds 64 KiB")
+		writeError(w, http.StatusRequestEntityTooLarge, "request_too_large", fmt.Sprintf("the body exceeds %d KiB", MaxBodyKiB))
 		return nil, false
 	} else if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", "unreadable body")
@@ -291,7 +309,7 @@ func (s *Server) reply(w http.ResponseWriter, body []byte, err error, what strin
 		status := http.StatusBadRequest
 		if refusal.Code == ceremony.CodeUnavailable {
 			status = http.StatusServiceUnavailable
-			w.Header().Set("Retry-After", "60")
+			w.Header().Set("Retry-After", seconds(retryAfter))
 		}
 		writeError(w, status, refusal.Code, messages[refusal.Code])
 	default:
@@ -311,14 +329,14 @@ var messages = map[string]string{
 
 func (s *Server) jwks(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Cache-Control", "public, max-age=300")
+	w.Header().Set("Cache-Control", "public, max-age="+seconds(publicMaxAge))
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	_, _ = w.Write(s.tokens.JWKS())
 }
 
 func (s *Server) helper(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
-	w.Header().Set("Cache-Control", "public, max-age=300")
+	w.Header().Set("Cache-Control", "public, max-age="+seconds(publicMaxAge))
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Cross-Origin-Resource-Policy", "cross-origin")
 	s.log.Info("helper loaded", "origin", requestingOrigin(r), "version", web.Version)
@@ -356,6 +374,9 @@ func (r *recorder) WriteHeader(code int) {
 }
 
 func b64(b []byte) string { return base64.RawURLEncoding.EncodeToString(b) }
+
+// seconds formats a duration as the whole seconds of an HTTP header.
+func seconds(d time.Duration) string { return strconv.FormatInt(int64(d/time.Second), 10) }
 
 // --- Change History -------------------------------------------------------
 // | PR     | Summary                                                       |

@@ -20,7 +20,8 @@ CREATE TABLE IF NOT EXISTS credentials (
 ) STRICT;
 CREATE INDEX IF NOT EXISTS credentials_by_user ON credentials (user_handle);
 
--- Tickets are stored by their SHA-256 hash only.
+-- A ticket is never stored: its row is keyed by the ticket's SHA-256 hash,
+-- which cannot give the ticket back.
 CREATE TABLE IF NOT EXISTS tickets (
 	hash         BLOB    PRIMARY KEY,
 	account      TEXT    NOT NULL,

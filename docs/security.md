@@ -62,7 +62,7 @@ It does **not** state:
 | **Page scripts, including the browser helper** | they run in the page and may be modified, bundled, or replaced | Nothing the helper does is trusted: the service verifies the authenticator's signed data and the origin the browser wrote. A *malicious script running on an allowed origin* is a different matter: see [XSS](#threats-and-residual-risks). |
 | **Callers of the public routes** | anyone on the Internet may call them | Registration needs a ticket. Verification needs a valid signature on a live, single-use challenge. Rate limits apply to every route. |
 | **Other containers on the shared network** | they can reach the service without going through Traefik | Host-facing routes authenticate every request in the service itself (#5). Public routes need no caller identity. |
-| **Database, for confidentiality** | a copy may leak | It holds only public material: public keys, pseudonymous identifiers, hashed tickets. A leaked copy forges nothing. |
+| **Database, for confidentiality** | a copy may leak | It holds only public material: public keys, pseudonymous identifiers, ticket hashes (never the tickets). A leaked copy forges nothing. |
 | **Database, for integrity** | **this one matters** | An attacker who can *write* to it can add their own public key under any account, then log in as that account. Protect write access like the signing key: a volume reachable only by the service, no shared database user, backups as sensitive as the key. |
 
 ### The browser

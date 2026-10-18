@@ -25,18 +25,26 @@ type Store struct {
 
 var _ store.Store = (*Store)(nil)
 
+// busyTimeoutMS is how long, in milliseconds, a statement waits for a lock
+// held by another connection to the same file before it fails.
+const busyTimeoutMS = 5000
+
+// maxOpenConns: see Open.
+const maxOpenConns = 1
+
 // Open opens or creates the database at path and applies the schema.
 func Open(ctx context.Context, path string) (*Store, error) {
 	// The path goes into a file: URI, where %, ? and # are special.
 	escaped := strings.NewReplacer("%", "%25", "?", "%3f", "#", "%23").Replace(path)
-	dsn := "file:" + escaped + "?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)&_pragma=synchronous(NORMAL)"
+	dsn := fmt.Sprintf("file:%s?_pragma=journal_mode(WAL)&_pragma=busy_timeout(%d)&_pragma=foreign_keys(1)&_pragma=synchronous(NORMAL)",
+		escaped, busyTimeoutMS)
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, err
 	}
 	// One connection serialises writes, which SQLite does anyway, and makes
 	// DELETE ... RETURNING the single atomic step the store contract needs.
-	db.SetMaxOpenConns(1)
+	db.SetMaxOpenConns(maxOpenConns)
 	if _, err := db.ExecContext(ctx, schema); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("sqlite: schema: %w", err)
@@ -191,7 +199,7 @@ func (s *Store) RecordUse(ctx context.Context, id []byte, oldCount, newCount uin
 
 func aaguid(b []byte) []byte {
 	if len(b) == 0 {
-		return make([]byte, 16)
+		return make([]byte, store.AAGUIDBytes)
 	}
 	return b
 }

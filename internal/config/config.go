@@ -20,11 +20,17 @@ type Settings struct {
 	API    httpapi.Config
 }
 
+// Defaults of docs/configuration.md that are not those of httpapi.
+const (
+	DefaultListen = ":8080"
+	DefaultDBPath = "/data/passkey-auth.db"
+)
+
 // Load reads the configuration through getenv (os.Getenv in production).
 func Load(getenv func(string) string) (Settings, error) {
 	s := Settings{
-		Listen: or(getenv("PA_LISTEN"), ":8080"),
-		DBPath: or(getenv("PA_DB_PATH"), "/data/passkey-auth.db"),
+		Listen: or(getenv("PA_LISTEN"), DefaultListen),
+		DBPath: or(getenv("PA_DB_PATH"), DefaultDBPath),
 	}
 	api := &s.API
 	var err error
@@ -64,9 +70,9 @@ func Load(getenv func(string) string) (Settings, error) {
 		def  time.Duration
 		max  time.Duration
 	}{
-		{"PA_CHALLENGE_TTL", &api.ChallengeTTL, 5 * time.Minute, 0},
-		{"PA_TICKET_TTL", &api.TicketTTL, 15 * time.Minute, 0},
-		{"PA_TOKEN_TTL", &api.TokenTTL, 60 * time.Second, 5 * time.Minute},
+		{"PA_CHALLENGE_TTL", &api.ChallengeTTL, httpapi.DefaultChallengeTTL, 0},
+		{"PA_TICKET_TTL", &api.TicketTTL, httpapi.DefaultTicketTTL, 0},
+		{"PA_TOKEN_TTL", &api.TokenTTL, httpapi.DefaultTokenTTL, httpapi.MaxTokenTTL},
 	} {
 		*d.dst = d.def
 		if v := getenv(d.name); v != "" {
@@ -78,7 +84,7 @@ func Load(getenv func(string) string) (Settings, error) {
 			return s, fmt.Errorf("%s: at most %s", d.name, d.max)
 		}
 	}
-	api.MaxChallenges = 100000
+	api.MaxChallenges = httpapi.DefaultMaxChallenges
 	if v := getenv("PA_MAX_CHALLENGES"); v != "" {
 		if api.MaxChallenges, err = strconv.Atoi(v); err != nil || api.MaxChallenges <= 0 {
 			return s, fmt.Errorf("PA_MAX_CHALLENGES: a positive integer is required, got %q", v)
