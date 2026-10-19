@@ -32,7 +32,7 @@ identity provider and keeps no session:
    published [JWKS](#keys) and opens its own session.
 
 ```
-browser                         passkey-auth                      host backend
+browser                                 passkey-auth              host backend
    | POST /v1/authentication/options {nonce}  |                        |
    |----------------------------------------->|                        |
    |<------------------- {publicKey: ...} ----|                        |
@@ -40,8 +40,8 @@ browser                         passkey-auth                      host backend
    | POST /v1/authentication/verify           |                        |
    |----------------------------------------->|                        |
    |<--------------------------- {token} -----|                        |
-   | token ------------------------------------------------------------>|
-   |                                          |<-- GET /v1/jwks.json (cached)
+   | token ----------------------------------------------------------->|
+   |                                          |<-- GET /v1/jwks.json --| (cached)
 ```
 
 **Topology.** One deployment serves one relying party (RP ID). The RP ID is the
