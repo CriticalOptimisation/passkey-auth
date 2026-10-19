@@ -1,0 +1,11 @@
+# Changes to CI workflows and dependency manifests need the maintainer's review.
+/.github/                @lepeuvedic
+/go.mod                  @lepeuvedic
+/go.sum                  @lepeuvedic
+/e2e/package.json        @lepeuvedic
+/e2e/package-lock.json   @lepeuvedic
+
+# --- Change History -------------------------------------------------------
+# | PR     | Summary                                                       |
+# |--------|---------------------------------------------------------------|
+# | #12    | maintainer owns workflows and dependency manifests            |
