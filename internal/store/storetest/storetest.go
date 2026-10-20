@@ -274,6 +274,72 @@ func Run(t *testing.T, open func(t *testing.T) store.Store) {
 			t.Fatalf("account a again: %q, %v", h, err)
 		}
 	})
+
+	t.Run("concurrent deletion of the last two credentials", func(t *testing.T) {
+		s := open(t)
+		h, err := s.EnsureUser(ctx, "a", []byte("handle-a"), now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids := [][]byte{[]byte("c1"), []byte("c2")}
+		for _, id := range ids {
+			if err := s.AddCredential(ctx, store.Credential{ID: id, UserHandle: h, PublicKey: []byte("cose"), CreatedAt: now, LastUsedAt: now}); err != nil {
+				t.Fatal(err)
+			}
+		}
+		var wg sync.WaitGroup
+		errs := make([]error, len(ids))
+		for i, id := range ids {
+			wg.Go(func() { errs[i] = s.DeleteCredential(ctx, h, id) })
+		}
+		wg.Wait()
+		for i, err := range errs {
+			if err != nil {
+				t.Errorf("delete %s: %v", ids[i], err)
+			}
+		}
+		if _, err := s.UserHandle(ctx, "a"); !errors.Is(err, store.ErrNotFound) {
+			t.Fatalf("the account survived both deletions: %v", err)
+		}
+	})
+
+	t.Run("deleting the last credential ends the account's registrations", func(t *testing.T) {
+		s := open(t)
+		h, err := s.EnsureUser(ctx, "a", []byte("handle-a"), now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := s.AddCredential(ctx, store.Credential{ID: []byte("c1"), UserHandle: h, PublicKey: []byte("cose"), CreatedAt: now, LastUsedAt: now}); err != nil {
+			t.Fatal(err)
+		}
+		exp := now.Add(time.Minute)
+		for _, c := range []store.Challenge{
+			{Value: []byte("reg-a"), Kind: store.KindRegistration, ExpiresAt: exp, Account: "a", UserHandle: h},
+			{Value: []byte("reg-b"), Kind: store.KindRegistration, ExpiresAt: exp, Account: "b", UserHandle: []byte("handle-b")},
+			{Value: []byte("auth"), Kind: store.KindAuthentication, ExpiresAt: exp, Nonce: "n"},
+		} {
+			if err := s.PutChallenge(ctx, c); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := s.DeleteCredential(ctx, h, []byte("c1")); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.TakeChallenge(ctx, []byte("reg-a")); !errors.Is(err, store.ErrNotFound) {
+			t.Fatalf("registration of the deleted account: %v, want ErrNotFound", err)
+		}
+		for _, v := range []string{"reg-b", "auth"} {
+			if _, err := s.TakeChallenge(ctx, []byte(v)); err != nil {
+				t.Fatalf("challenge %s: %v", v, err)
+			}
+		}
+		// A registration that got past the deletion cannot store its
+		// credential: the user is gone.
+		err = s.AddCredential(ctx, store.Credential{ID: []byte("c2"), UserHandle: h, PublicKey: []byte("cose"), CreatedAt: now, LastUsedAt: now})
+		if !errors.Is(err, store.ErrNotFound) {
+			t.Fatalf("credential of a deleted user: %v, want ErrNotFound", err)
+		}
+	})
 }
 
 // --- Change History -------------------------------------------------------

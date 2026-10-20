@@ -106,6 +106,9 @@ func TestRefused(t *testing.T) {
 		"PA_HOST_DID  ":                {"PA_HOST_DID": "did:web:"},
 		"PA_HOST_DID   ":               {"PA_HOST_DID": "https://example.com"},
 		"PA_HOST_LISTEN":               {"PA_LISTEN": ":9000", "PA_HOST_LISTEN": ":9000"},
+		"PA_HOST_LISTEN ":              {"PA_LISTEN": ":8081"}, // the host listener's default
+		"PA_HOST_DID    ":              {"PA_HOST_DID": "did:web:example.com:.."},
+		"PA_HOST_DID     ":             {"PA_HOST_DID": "did:web:example.com%3Ahttp"},
 	}
 	for name, override := range cases {
 		t.Run(name, func(t *testing.T) {

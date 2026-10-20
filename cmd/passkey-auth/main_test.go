@@ -15,6 +15,8 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -99,14 +101,20 @@ func startService(t *testing.T) (public, host string, stop func() error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	errc := make(chan error, 1)
 	go func() { errc <- run(ctx, slog.New(slog.DiscardHandler)) }()
+	// stop may be called by the test and again by the cleanup: run's result
+	// is read once.
+	var once sync.Once
+	var runErr error
 	stop = func() error {
-		cancel()
-		select {
-		case err := <-errc:
-			return err
-		case <-time.After(shutdownTimeout + 5*time.Second):
-			return fmt.Errorf("run did not return after cancel")
-		}
+		once.Do(func() {
+			cancel()
+			select {
+			case runErr = <-errc:
+			case <-time.After(shutdownTimeout + 5*time.Second):
+				runErr = fmt.Errorf("run did not return after cancel")
+			}
+		})
+		return runErr
 	}
 	t.Cleanup(func() { _ = stop() })
 	waitListening(t, public)
@@ -228,5 +236,88 @@ func TestHostListenerFailureStopsTheService(t *testing.T) {
 	if c, err := net.DialTimeout("tcp", public, 200*time.Millisecond); err == nil {
 		c.Close()
 		t.Error("the public listener still listens")
+	}
+}
+
+// If the public listener cannot start, run fails and the host listener is
+// not left behind.
+func TestPublicListenerFailureStopsTheService(t *testing.T) {
+	busy, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer busy.Close()
+	dir := t.TempDir()
+	_, key, _ := ed25519.GenerateKey(rand.Reader)
+	der, _ := x509.MarshalPKCS8PrivateKey(key)
+	keyFile := filepath.Join(dir, "signing-key.pem")
+	_ = os.WriteFile(keyFile, pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der}), 0o600)
+	host := freePort(t)
+	for k, v := range map[string]string{
+		"PA_LISTEN": busy.Addr().String(), "PA_HOST_LISTEN": host,
+		"PA_RP_ID": "localhost", "PA_ORIGINS": "http://localhost", "PA_ISSUER": "http://localhost/auth",
+		"PA_AUDIENCE": "host", "PA_SIGNING_KEY_FILE": keyFile, "PA_DB_PATH": filepath.Join(dir, "db"),
+		"PA_HOST_DID": "did:web:host.invalid",
+	} {
+		t.Setenv(k, v)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	errc := make(chan error, 1)
+	go func() { errc <- run(ctx, slog.New(slog.DiscardHandler)) }()
+	select {
+	case err := <-errc:
+		if err == nil || !strings.Contains(err.Error(), busy.Addr().String()) {
+			t.Fatalf("run: %v, want an error naming %s", err, busy.Addr())
+		}
+	case <-time.After(shutdownTimeout + 5*time.Second):
+		t.Fatal("run kept serving with its public port taken")
+	}
+	if c, err := net.DialTimeout("tcp", host, 200*time.Millisecond); err == nil {
+		c.Close()
+		t.Error("the host listener still listens")
+	}
+}
+
+// A request whose handler runs when the shutdown starts gets its answer,
+// while both listeners already refuse new connections.
+func TestShutdownLetsARunningRequestFinish(t *testing.T) {
+	public, host, stop := startService(t)
+	conn, err := net.DialTimeout("tcp", public, 2*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	// The headers and half the body: the handler runs, reading the body.
+	body := `{"nonce":"` + strings.Repeat("A", 43) + `"}`
+	fmt.Fprintf(conn, "POST /v1/authentication/options HTTP/1.1\r\nHost: %s\r\nContent-Type: application/json\r\nContent-Length: %d\r\nConnection: close\r\n\r\n%s",
+		public, len(body), body[:10])
+	time.Sleep(200 * time.Millisecond)
+	done := make(chan error, 1)
+	go func() { done <- stop() }()
+	time.Sleep(300 * time.Millisecond)
+	for _, addr := range []string{public, host} {
+		if c, err := net.DialTimeout("tcp", addr, 200*time.Millisecond); err == nil {
+			c.Close()
+			t.Errorf("%s accepts connections during the shutdown", addr)
+		}
+	}
+	select {
+	case err := <-done:
+		t.Fatalf("run returned before the running request finished: %v", err)
+	default:
+	}
+	fmt.Fprint(conn, body[10:])
+	_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
+	res, err := http.ReadResponse(bufio.NewReader(conn), nil)
+	if err != nil {
+		t.Fatalf("no answer to the running request: %v", err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Errorf("running request: %d, want 200", res.StatusCode)
+	}
+	if err := <-done; err != nil {
+		t.Fatalf("run: %v", err)
 	}
 }

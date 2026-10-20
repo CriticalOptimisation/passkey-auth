@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -40,7 +41,10 @@ type env struct {
 	hostTS *httptest.Server
 }
 
-func newEnv(t *testing.T) *env {
+func newEnv(t *testing.T) *env { t.Helper(); return newLoggedEnv(t, nil) }
+
+// newLoggedEnv is newEnv, with the host API and the resolver writing to log.
+func newLoggedEnv(t *testing.T, log *slog.Logger) *env {
 	t.Helper()
 	e := &env{t: t, now: time.Unix(1_800_000_000, 0), host: testhost.New(t)}
 	now := func() time.Time { return e.now }
@@ -58,12 +62,12 @@ func newEnv(t *testing.T) *env {
 	if err != nil {
 		t.Fatal(err)
 	}
-	keys, err := didweb.New(didweb.Config{DID: e.host.DID, Client: e.host.Client(), Now: now})
+	keys, err := didweb.New(didweb.Config{DID: e.host.DID, Client: e.host.Client(), Now: now, Logger: log})
 	if err != nil {
 		t.Fatal(err)
 	}
 	h, err := hostapi.New(hostapi.Config{
-		HostDID: e.host.DID, Audience: issuer, Keys: keys, Tickets: pub, TicketTTL: ticketTTL, Now: now,
+		HostDID: e.host.DID, Audience: issuer, Keys: keys, Tickets: pub, TicketTTL: ticketTTL, Now: now, Logger: log,
 	}, st)
 	if err != nil {
 		t.Fatal(err)
