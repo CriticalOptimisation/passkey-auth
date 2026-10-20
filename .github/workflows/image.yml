@@ -1,0 +1,92 @@
+name: image
+
+# Container image (docs/container.md): two builds compared, size, smoke test.
+# Every check lives in tools/image.sh; this workflow only orchestrates.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: image-${{ github.ref }}
+  # Never cancel a run of main or of a release halfway through a publication.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    name: build ${{ matrix.copy }}
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        copy: [a, b]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: build the OCI archive
+        run: tools/image.sh build "$RUNNER_TEMP/image-${{ matrix.copy }}.tar"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: image-${{ matrix.copy }}
+          path: ${{ runner.temp }}/image-${{ matrix.copy }}.tar
+          retention-days: 7
+          if-no-files-found: error
+
+  compare:
+    name: compare digests and size
+    needs: build
+    runs-on: ubuntu-24.04
+    outputs:
+      digest: ${{ steps.compare.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: image-*
+          merge-multiple: true
+          path: ${{ runner.temp }}
+      - id: compare
+        name: same commit, same digest
+        run: |
+          digest=$(tools/image.sh compare "$RUNNER_TEMP/image-a.tar" "$RUNNER_TEMP/image-b.tar")
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Image"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| digest (two builds, two runners) | \`$digest\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: size (fails above 30 MB)
+        run: |
+          # Report the sizes even when the check fails.
+          status=0
+          tools/image.sh size "$RUNNER_TEMP/image-a.tar" > "$RUNNER_TEMP/size" || status=$?
+          cat "$RUNNER_TEMP/size"
+          while read -r kind bytes; do
+            echo "| $kind size | $bytes bytes ($(numfmt --to=si "$bytes")B) |"
+          done < "$RUNNER_TEMP/size" >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
+
+  smoke:
+    name: smoke (read-only, non-root)
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: image-a
+          path: ${{ runner.temp }}
+      - run: tools/image.sh smoke "$RUNNER_TEMP/image-a.tar"

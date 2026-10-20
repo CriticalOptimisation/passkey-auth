@@ -173,7 +173,7 @@ non-zero status and one JSON log line naming the variable at fault.
 ## Building and checking: `tools/image.sh`
 
 The CI workflow and the maintainer run the same script. It needs Docker with
-buildx, `git`, `jq`, `curl` and `openssl`; no Go installation.
+buildx, `git`, `jq` and `openssl`; no Go installation.
 
 | Command | Does | Exit status |
 |---|---|---|
