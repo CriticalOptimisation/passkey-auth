@@ -129,7 +129,7 @@ func (r *Resolver) HostKey(ctx context.Context, kid string) (*ecdsa.PublicKey, e
 	defer r.mu.Unlock()
 	now := r.cfg.Now()
 	fetched := false
-	if r.keys == nil || !now.Before(r.nextFetch) {
+	if !now.Before(r.nextFetch) { // zero before the first fetch
 		r.refresh(ctx, now)
 		fetched = true
 	}

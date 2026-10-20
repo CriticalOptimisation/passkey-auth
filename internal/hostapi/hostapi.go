@@ -109,7 +109,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) string {
 		name, method = routeTickets, http.MethodPost
 	case len(seg) == 5 && seg[0] == "" && seg[1] == "v1" && seg[2] == "accounts" && seg[4] == "credentials":
 		name, method = routeCredentials, http.MethodGet
-	case len(seg) == 6 && seg[0] == "" && seg[1] == "v1" && seg[2] == "accounts" && seg[4] == "credentials":
+	case len(seg) == 6 && seg[0] == "" && seg[1] == "v1" && seg[2] == "accounts" && seg[4] == "credentials" && seg[5] != "":
 		name, method = routeCredential, http.MethodDelete
 	default:
 		httpapi.WriteError(w, http.StatusNotFound, "not_found", "no such route")
