@@ -142,10 +142,10 @@ func HashTicket(ticket string) []byte {
 // IssueTicket creates a registration ticket for account.
 func (c *Ceremonies) IssueTicket(ctx context.Context, account, displayName string) (string, error) {
 	if account == "" || len(account) > MaxAccountBytes {
-		return "", fmt.Errorf("ceremony: account must be 1 to %d bytes", MaxAccountBytes)
+		return "", refuse(CodeInvalidRequest, "account must be 1 to %d bytes", MaxAccountBytes)
 	}
 	if displayName == "" || len(displayName) > MaxDisplayBytes {
-		return "", fmt.Errorf("ceremony: display name must be 1 to %d bytes", MaxDisplayBytes)
+		return "", refuse(CodeInvalidRequest, "display name must be 1 to %d bytes", MaxDisplayBytes)
 	}
 	ticket := b64(random(TicketBytes))
 	err := c.st.CreateTicket(ctx, store.Ticket{
@@ -323,6 +323,8 @@ func (c *Ceremonies) VerifyRegistration(ctx context.Context, body []byte) (Resul
 	})
 	if errors.Is(err, store.ErrConflict) {
 		return Result{}, refuse(CodeVerificationFailed, "credential ID already registered")
+	} else if errors.Is(err, store.ErrNotFound) {
+		return Result{}, refuse(CodeChallengeInvalid, "account deleted during the ceremony")
 	} else if err != nil {
 		return Result{}, err
 	}

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/CriticalOptimisation/passkey-auth/internal/didweb"
 	"github.com/CriticalOptimisation/passkey-auth/internal/httpapi"
 	"github.com/CriticalOptimisation/passkey-auth/internal/token"
 )
@@ -24,15 +25,27 @@ type Settings struct {
 
 // Defaults of docs/configuration.md that are not those of httpapi.
 const (
-	DefaultListen = ":8080"
-	DefaultDBPath = "/data/passkey-auth.db"
+	DefaultListen     = ":8080"
+	DefaultHostListen = ":8081"
+	DefaultDBPath     = "/data/passkey-auth.db"
 )
 
 // Load reads the configuration through getenv (os.Getenv in production).
 func Load(getenv func(string) string) (Settings, error) {
 	s := Settings{
-		Listen: or(getenv("PA_LISTEN"), DefaultListen),
-		DBPath: or(getenv("PA_DB_PATH"), DefaultDBPath),
+		Listen:     or(getenv("PA_LISTEN"), DefaultListen),
+		HostListen: or(getenv("PA_HOST_LISTEN"), DefaultHostListen),
+		HostDID:    getenv("PA_HOST_DID"),
+		DBPath:     or(getenv("PA_DB_PATH"), DefaultDBPath),
+	}
+	if s.HostListen == s.Listen {
+		return s, fmt.Errorf("PA_HOST_LISTEN must differ from PA_LISTEN (%s)", s.Listen)
+	}
+	if s.HostDID == "" {
+		return s, fmt.Errorf("PA_HOST_DID is required")
+	}
+	if _, err := didweb.URL(s.HostDID); err != nil {
+		return s, fmt.Errorf("PA_HOST_DID: %w", err)
 	}
 	api := &s.API
 	var err error

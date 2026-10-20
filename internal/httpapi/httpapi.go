@@ -133,8 +133,8 @@ func New(cfg Config, st store.Store) (*Server, error) {
 	return s, nil
 }
 
-// IssueTicket creates a registration ticket. The host-facing API (#5)
-// exposes it; until then, the e2e build and the tests call it directly.
+// IssueTicket creates a registration ticket. The host-facing API
+// (internal/hostapi) exposes it on the host listener; no public route does.
 func (s *Server) IssueTicket(ctx context.Context, account, displayName string) (string, error) {
 	return s.cer.IssueTicket(ctx, account, displayName)
 }
@@ -175,6 +175,15 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rt.handler(w, r)
+}
+
+// Decode applies the body conventions of docs/api.md to another API: the
+// host-facing one.
+func Decode(w http.ResponseWriter, r *http.Request, v any) ([]byte, bool) { return decode(w, r, v) }
+
+// WriteError writes the error envelope of docs/api.md.
+func WriteError(w http.ResponseWriter, status int, code, message string) {
+	writeError(w, status, code, message)
 }
 
 // decode reads a JSON body strictly into v and returns the raw bytes.

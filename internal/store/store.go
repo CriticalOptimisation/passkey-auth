@@ -90,7 +90,8 @@ type Store interface {
 	// creates nothing.
 	UserHandle(ctx context.Context, account string) ([]byte, error)
 
-	// AddCredential fails with ErrConflict if the credential ID exists.
+	// AddCredential fails with ErrConflict if the credential ID exists, and
+	// with ErrNotFound if its user does not (deleted during the ceremony).
 	AddCredential(ctx context.Context, c Credential) error
 	Credential(ctx context.Context, id []byte) (Credential, error)
 	CredentialsOf(ctx context.Context, userHandle []byte) ([]Credential, error)
@@ -99,8 +100,9 @@ type Store interface {
 	RecordUse(ctx context.Context, id []byte, oldCount, newCount uint32, backupState bool, at time.Time) error
 	// DeleteCredential deletes credential id of userHandle, or answers
 	// ErrNotFound if userHandle has no such credential. Deleting the last
-	// credential also deletes the user and the open tickets of its account,
-	// in the same transaction.
+	// credential also deletes the user, the open tickets of its account and
+	// the challenges of its registrations in progress, in the same
+	// transaction.
 	DeleteCredential(ctx context.Context, userHandle, id []byte) error
 
 	Close() error
