@@ -1,0 +1,13 @@
+# Allow-list: only the sources of the binary enter the build context, so local
+# data, secrets, worktrees and build output never can.
+*
+!go.mod
+!go.sum
+!cmd/
+!internal/
+!web/
+
+# --- Change History -------------------------------------------------------
+# | PR     | Summary                                                       |
+# |--------|---------------------------------------------------------------|
+# | #15    | allow-list build context                                      |
