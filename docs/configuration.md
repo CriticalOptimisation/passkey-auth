@@ -90,7 +90,9 @@ running several replicas needs another storage backend (see
 ## Logs
 
 Structured JSON on standard output: one line per request, plus the reason of
-every rejected ceremony. Logs carry no challenge, ticket, token or key
+every rejected ceremony or host token. The host routes are logged by route
+(`/v1/accounts/{account}/credentials`), since their paths hold account
+references. Logs carry no challenge, ticket, token or key
 material, and no IP address or account reference (see the GDPR section of the
 README). The reverse proxy's own logs are the operator's responsibility.
 

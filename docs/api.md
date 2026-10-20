@@ -442,9 +442,10 @@ identifier, and the service resolves it as the
   kept document causes one early fetch, at most once every 30 s, so that a
   newly added key works at once. A key marked `revoked` stops working when the
   kept document expires, within 5 minutes.
-- When a fetch fails, the service keeps the last document it fetched and logs
-  a warning. Until a first document has been fetched, every host route
-  answers `503 unavailable` to a request that carries a token.
+- When a fetch fails, the service keeps the last document it fetched, logs
+  a warning, and tries again 30 s later at the earliest. Until a first
+  document has been fetched, every host route answers `503 unavailable` to a
+  request that carries a token.
 
 A failed check answers `401 host_unauthorized`, with
 `WWW-Authenticate: Bearer`. The log gives the reason, never the token.
@@ -532,8 +533,10 @@ to another account, answers `404 not_found`.
   `/v1/authentication/verify` with it fails with `credential_unknown`. Result
   tokens already issued stay valid until their `exp`, at most `PA_TOKEN_TTL`.
 - **Deleting the last credential of an account deletes the account**: its
-  account reference, its user handle and its open registration tickets. A later
-  ticket for the same account reference starts with a new user handle.
+  account reference, its user handle and its open registration tickets. A
+  registration already in progress for it fails at
+  `/v1/registration/verify` with `challenge_invalid`. A later ticket for the
+  same account reference starts with a new user handle.
 - There is no route to delete an account that has no credential: such an
   account holds nothing but open tickets, which expire.
 
