@@ -32,23 +32,23 @@ var wrap = func(_ *httpapi.Server, h http.Handler) http.Handler { return h }
 
 func main() {
 	log := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	if err := run(log); err != nil {
+	// ctx gets cancelled when SIGINT or SIGTERM arrives.
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	err := run(ctx, log)
+	stop()
+	if err != nil {
 		log.Error("exit", "error", err.Error())
 		os.Exit(1)
 	}
 }
 
-// run serves until the server fails or SIGINT/SIGTERM asks it to stop.
-func run(log *slog.Logger) error {
+// run serves until the server fails or ctx is cancelled.
+func run(ctx context.Context, log *slog.Logger) error {
 	// Read the PA_* settings from the environment; stop on the first invalid one.
 	settings, err := config.Load(os.Getenv)
 	if err != nil {
 		return err
 	}
-	// ctx gets cancelled when SIGINT or SIGTERM arrives; stop() undoes this when run returns.
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
-
 	// Open the SQLite store; the deferred Close runs on every return below, error or not.
 	st, err := sqlite.Open(ctx, settings.DBPath)
 	if err != nil {

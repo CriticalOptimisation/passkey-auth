@@ -197,6 +197,17 @@ func (s *Store) RecordUse(ctx context.Context, id []byte, oldCount, newCount uin
 	return nil
 }
 
+// errNotImplemented marks the skeleton of #5; the implementation replaces it.
+var errNotImplemented = errors.New("sqlite: not implemented")
+
+func (s *Store) UserHandle(ctx context.Context, account string) ([]byte, error) {
+	return nil, errNotImplemented
+}
+
+func (s *Store) DeleteCredential(ctx context.Context, userHandle, id []byte) error {
+	return errNotImplemented
+}
+
 func aaguid(b []byte) []byte {
 	if len(b) == 0 {
 		return make([]byte, store.AAGUIDBytes)

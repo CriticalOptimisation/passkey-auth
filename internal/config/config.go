@@ -15,9 +15,11 @@ import (
 
 // Settings is the whole configuration of one service instance.
 type Settings struct {
-	Listen string
-	DBPath string
-	API    httpapi.Config
+	Listen     string
+	HostListen string // host-facing routes
+	HostDID    string // the host's did:web identifier
+	DBPath     string
+	API        httpapi.Config
 }
 
 // Defaults of docs/configuration.md that are not those of httpapi.

@@ -86,6 +86,10 @@ type Store interface {
 	// Account returns the account of a user handle.
 	Account(ctx context.Context, userHandle []byte) (string, error)
 
+	// UserHandle returns the user handle of account, or ErrNotFound; it
+	// creates nothing.
+	UserHandle(ctx context.Context, account string) ([]byte, error)
+
 	// AddCredential fails with ErrConflict if the credential ID exists.
 	AddCredential(ctx context.Context, c Credential) error
 	Credential(ctx context.Context, id []byte) (Credential, error)
@@ -93,6 +97,11 @@ type Store interface {
 	// RecordUse stores the new counter and backup state, provided the counter
 	// still holds the value read before the ceremony; otherwise ErrConflict.
 	RecordUse(ctx context.Context, id []byte, oldCount, newCount uint32, backupState bool, at time.Time) error
+	// DeleteCredential deletes credential id of userHandle, or answers
+	// ErrNotFound if userHandle has no such credential. Deleting the last
+	// credential also deletes the user and the open tickets of its account,
+	// in the same transaction.
+	DeleteCredential(ctx context.Context, userHandle, id []byte) error
 
 	Close() error
 }
