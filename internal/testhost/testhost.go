@@ -270,3 +270,8 @@ func B64JSON(v any) string {
 }
 
 func b64(b []byte) string { return base64.RawURLEncoding.EncodeToString(b) }
+
+// --- Change History -------------------------------------------------------
+// | PR     | Summary                                                       |
+// |--------|---------------------------------------------------------------|
+// | #14    | test host: P-256 keys, DID document over TLS, tokens          |

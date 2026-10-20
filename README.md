@@ -80,4 +80,5 @@ Change History
 |-----|---------|
 | #12 | pointers to the docs; personal data (GDPR) section |
 | #15 | link to the container image docs |
+| #14 | GDPR: revoking the last credential deletes the account |
 -->

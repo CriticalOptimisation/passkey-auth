@@ -124,3 +124,4 @@ func TestRefused(t *testing.T) {
 // | PR     | Summary                                                       |
 // |--------|---------------------------------------------------------------|
 // | #12    | defaults and refused configurations                           |
+// | #14    | host settings and their refusals                              |

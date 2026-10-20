@@ -300,3 +300,8 @@ func p256(raw json.RawMessage) (*ecdsa.PublicKey, error) {
 	}
 	return ecdsa.ParseUncompressedPublicKey(elliptic.P256(), append(append([]byte{4}, x...), y...))
 }
+
+// --- Change History -------------------------------------------------------
+// | PR     | Summary                                                       |
+// |--------|---------------------------------------------------------------|
+// | #14    | did:web resolution, authentication keys, cache                |

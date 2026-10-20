@@ -112,3 +112,4 @@ type Store interface {
 // | PR     | Summary                                                       |
 // |--------|---------------------------------------------------------------|
 // | #12    | storage contract and domain types                             |
+// | #14    | UserHandle, DeleteCredential                                  |

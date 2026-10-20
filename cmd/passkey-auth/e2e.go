@@ -29,3 +29,4 @@ func init() {
 // | PR     | Summary                                                       |
 // |--------|---------------------------------------------------------------|
 // | #12    | test-only routes /test/tickets and /test/ (e2e tag)           |
+// | #14    | PA_E2E_HOST_DID_FILE; /test/tickets removed                   |

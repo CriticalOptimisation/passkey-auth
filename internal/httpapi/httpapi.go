@@ -391,3 +391,4 @@ func seconds(d time.Duration) string { return strconv.FormatInt(int64(d/time.Sec
 // | PR     | Summary                                                       |
 // |--------|---------------------------------------------------------------|
 // | #12    | public routes, strict JSON, CORS, errors                      |
+// | #14    | Decode and WriteError shared with the host API                |

@@ -273,3 +273,8 @@ func TestCancelledCallerDoesNotFailTheFetch(t *testing.T) {
 		t.Fatalf("next lookup: %v, %d fetches", err, h.Fetches())
 	}
 }
+
+// --- Change History -------------------------------------------------------
+// | PR     | Summary                                                       |
+// |--------|---------------------------------------------------------------|
+// | #14    | timeouts, redirects, retry back-off, key material             |

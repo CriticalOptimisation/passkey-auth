@@ -219,3 +219,8 @@ type writerFunc func([]byte) (int, error)
 func (f writerFunc) Write(p []byte) (int, error) { return f(p) }
 
 var _ io.Writer = writerFunc(nil)
+
+// --- Change History -------------------------------------------------------
+// | PR     | Summary                                                       |
+// |--------|---------------------------------------------------------------|
+// | #14    | deletion races, malformed paths, logs without personal data   |

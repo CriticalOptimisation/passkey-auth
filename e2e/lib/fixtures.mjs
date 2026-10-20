@@ -106,3 +106,4 @@ export const newNonce = () => Buffer.from(crypto.getRandomValues(new Uint8Array(
 // | PR     | Summary                                                       |
 // |--------|---------------------------------------------------------------|
 // | #12    | virtual authenticators, test routes, helper driver            |
+// | #14    | tickets, list and revoke through the host API                 |

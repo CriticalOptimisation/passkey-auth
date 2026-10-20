@@ -321,3 +321,8 @@ func TestShutdownLetsARunningRequestFinish(t *testing.T) {
 		t.Fatalf("run: %v", err)
 	}
 }
+
+// --- Change History -------------------------------------------------------
+// | PR     | Summary                                                       |
+// |--------|---------------------------------------------------------------|
+// | #14    | two listeners, port failures, joint shutdown                  |

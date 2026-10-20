@@ -252,4 +252,5 @@ Change History
 | PR  | Summary |
 |-----|---------|
 | #12 | security boundary, threats, assurance profiles |
+| #14 | host DID document trust; host token and key threats |
 -->

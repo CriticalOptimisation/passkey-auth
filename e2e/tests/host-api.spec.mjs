@@ -24,3 +24,8 @@ test("the public listener does not serve the host routes", async ({ request, ser
   expect((await res.json()).error.code).toBe("not_found");
   expect((await request.get("/v1/accounts/a/credentials", { headers })).status()).toBe(404);
 });
+
+// --- Change History -------------------------------------------------------
+// | PR     | Summary                                                       |
+// |--------|---------------------------------------------------------------|
+// | #14    | revoked passkey; host routes absent from the public port      |

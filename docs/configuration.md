@@ -334,4 +334,5 @@ Change History
 | PR  | Summary |
 |-----|---------|
 | #12 | variables, keys, logs, deployment behind Traefik |
+| #14 | host listener and DID, host router, one vs two listeners |
 -->

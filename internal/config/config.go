@@ -119,3 +119,4 @@ func or(v, def string) string {
 // | PR     | Summary                                                       |
 // |--------|---------------------------------------------------------------|
 // | #12    | configuration from the environment                            |
+// | #14    | PA_HOST_LISTEN, PA_HOST_DID                                   |

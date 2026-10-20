@@ -267,3 +267,4 @@ func conflict(err error) error {
 // | PR     | Summary                                                       |
 // |--------|---------------------------------------------------------------|
 // | #12    | SQLite implementation of the store                            |
+// | #14    | UserHandle, DeleteCredential, deleted user on AddCredential   |

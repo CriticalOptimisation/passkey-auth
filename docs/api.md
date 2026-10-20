@@ -610,4 +610,5 @@ Change History
 | PR  | Summary |
 |-----|---------|
 | #12 | API contract: ceremonies, token, JWKS, helper, errors |
+| #14 | host-facing API: host token, did:web keys, three routes |
 -->

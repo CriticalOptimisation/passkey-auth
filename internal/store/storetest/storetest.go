@@ -346,3 +346,4 @@ func Run(t *testing.T, open func(t *testing.T) store.Store) {
 // | PR     | Summary                                                       |
 // |--------|---------------------------------------------------------------|
 // | #12    | contract tests for any store backend                          |
+// | #14    | contract of UserHandle and DeleteCredential                   |

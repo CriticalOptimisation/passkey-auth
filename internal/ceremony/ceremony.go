@@ -442,3 +442,4 @@ func random(n int) []byte {
 // | PR     | Summary                                                       |
 // |--------|---------------------------------------------------------------|
 // | #12    | options and verification of both ceremonies                   |
+// | #14    | ticket input refused as invalid_request; deleted account      |

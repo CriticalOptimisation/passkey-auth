@@ -144,3 +144,4 @@ func newServer(addr string, h http.Handler) *http.Server {
 // | PR     | Summary                                                       |
 // |--------|---------------------------------------------------------------|
 // | #12    | service entry point, graceful shutdown                        |
+// | #14    | host listener; both servers bound first, stopped together     |

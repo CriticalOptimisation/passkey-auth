@@ -335,3 +335,8 @@ func TestFetchOverride(t *testing.T) {
 		t.Fatal("the HTTPS fetch ran despite Config.Fetch")
 	}
 }
+
+// --- Change History -------------------------------------------------------
+// | PR     | Summary                                                       |
+// |--------|---------------------------------------------------------------|
+// | #14    | mapping, key filters, cache, early fetch, failures            |

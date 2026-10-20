@@ -49,3 +49,4 @@ child.on("exit", (code, signal) => process.exit(code ?? (signal ? 1 : 0)));
 // | PR     | Summary                                                       |
 // |--------|---------------------------------------------------------------|
 // | #12    | starts the e2e build with a fresh key and database            |
+// | #14    | host listener on port + 1000, host DID document file          |

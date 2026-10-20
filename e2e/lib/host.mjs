@@ -45,3 +45,8 @@ export function hostToken(port, audience) {
   const key = createPrivateKey({ key: privateJwk, format: "jwk" });
   return `${input}.${sign("sha256", Buffer.from(input), { key, dsaEncoding: "ieee-p1363" }).toString("base64url")}`;
 }
+
+// --- Change History -------------------------------------------------------
+// | PR     | Summary                                                       |
+// |--------|---------------------------------------------------------------|
+// | #14    | e2e host: P-256 key, DID document, host tokens                |
