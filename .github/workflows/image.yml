@@ -1,6 +1,7 @@
 name: image
 
-# Container image (docs/container.md): two builds compared, size, smoke test.
+# Container image (docs/container.md): two builds compared, size, smoke test;
+# on main and for releases, publication, attestation and release notes.
 # Every check lives in tools/image.sh; this workflow only orchestrates.
 
 on:
@@ -90,3 +91,104 @@ jobs:
           name: image-a
           path: ${{ runner.temp }}
       - run: tools/image.sh smoke "$RUNNER_TEMP/image-a.tar"
+
+  # The archive that passed the checks, pushed as is, attested, verified.
+  # Never on a pull request; a manual run publishes only from main.
+  publish:
+    name: publish and attest
+    needs: [compare, smoke]
+    if: >-
+      github.event_name == 'push' || github.event_name == 'release' ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    env:
+      IMAGE: ghcr.io/criticaloptimisation/passkey-auth
+      DIGEST: ${{ needs.compare.outputs.digest }}
+    outputs:
+      digest: ${{ needs.compare.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: image-a
+          path: ${{ runner.temp }}
+      - name: push the archive (digest preserved and checked)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          REGISTRY_USER: ${{ github.actor }}
+          EVENT: ${{ github.event_name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          if [[ $EVENT == release ]]; then
+            tags=("$RELEASE_TAG")
+          else
+            tags=(main "sha-$GITHUB_SHA")
+          fi
+          pushed=$(printf '%s\n' "$GITHUB_TOKEN" |
+            tools/image.sh push "$RUNNER_TEMP/image-a.tar" "$IMAGE" "${tags[@]}")
+          [[ $pushed == "$DIGEST" ]] || { echo "pushed $pushed, compared $DIGEST" >&2; exit 1; }
+      - name: log in to the registry, for the attestation
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          REGISTRY_USER: ${{ github.actor }}
+        run: printf '%s\n' "$GITHUB_TOKEN" | docker login ghcr.io -u "$REGISTRY_USER" --password-stdin
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ env.DIGEST }}
+          push-to-registry: true
+      - name: verify the attestation
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh attestation verify "oci://$IMAGE@$DIGEST" --repo "$GITHUB_REPOSITORY"
+          {
+            echo
+            echo "### Published"
+            echo
+            echo '```sh'
+            echo "docker pull $IMAGE@$DIGEST"
+            echo "gh attestation verify oci://$IMAGE@$DIGEST --repo $GITHUB_REPOSITORY"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: log out of the registry
+        if: always()
+        run: docker logout ghcr.io
+
+  # Appends the digest to the notes of the release. The only job that writes
+  # to the repository.
+  release-notes:
+    name: digest in the release notes
+    needs: publish
+    if: github.event_name == 'release'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      IMAGE: ghcr.io/criticaloptimisation/passkey-auth
+      DIGEST: ${{ needs.publish.outputs.digest }}
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.event.release.tag_name }}
+    steps:
+      - name: append the digest
+        run: |
+          {
+            gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body --jq .body
+            echo
+            echo "## Container image"
+            echo
+            echo "Digest: \`$DIGEST\`"
+            echo
+            echo '```sh'
+            echo "docker pull $IMAGE@$DIGEST"
+            echo "gh attestation verify oci://$IMAGE@$DIGEST --repo $GITHUB_REPOSITORY"
+            echo '```'
+          } > "$RUNNER_TEMP/notes.md"
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file "$RUNNER_TEMP/notes.md"

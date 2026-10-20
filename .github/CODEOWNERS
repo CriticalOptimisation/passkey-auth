@@ -5,6 +5,11 @@
 /e2e/package.json        @lepeuvedic
 /e2e/package-lock.json   @lepeuvedic
 
+# The container image: its recipe and the script that builds and publishes it.
+/Dockerfile              @lepeuvedic
+/.dockerignore           @lepeuvedic
+/tools/image.sh          @lepeuvedic
+
 # --- Change History -------------------------------------------------------
 # | PR     | Summary                                                       |
 # |--------|---------------------------------------------------------------|

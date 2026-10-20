@@ -183,6 +183,7 @@ buildx, `git`, `jq` and `openssl`; no Go installation.
 | `tools/image.sh repro` | two builds, each on a new builder and without cache, then `compare` | `0` reproducible; `1` not |
 | `tools/image.sh size <archive>` | prints `compressed <bytes>` (what a pull downloads) and `uncompressed <bytes>` | `0`; `1` uncompressed size above 30 MB (30 000 000 bytes) |
 | `tools/image.sh smoke <archive>` | loads the image and runs it hardened (below) | `0` all checks passed; `1` a check failed |
+| `tools/image.sh push <archive> <repository> <tag>…` | pushes the archive as is, digests preserved, under each tag; the registry token is read from standard input, the user from `REGISTRY_USER`; checks that the registry serves the archive's digest under every tag, and prints it | `0` pushed; `1` push failed or digest differs |
 
 Usage errors exit with `2`. Diagnostics go to standard error, one line each,
 starting with `image.sh:`.
