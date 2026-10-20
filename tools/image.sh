@@ -8,6 +8,8 @@
 #   tools/image.sh repro                  two builds on new builders, no cache, then compare
 #   tools/image.sh size <archive>         compressed/uncompressed sizes; exit 1 above 30 MB
 #   tools/image.sh smoke <archive>        runs the image hardened and checks it
+#   tools/image.sh push <archive> <repository> <tag>...
+#                                         pushes the archive as is; token on stdin
 #
 # Exit status: 0 success, 1 a check or a build failed, 2 usage error.
 set -euo pipefail
@@ -25,7 +27,7 @@ root=$(git rev-parse --show-toplevel)
 
 die() { echo "image.sh: $*" >&2; exit 1; }
 usage() {
-  echo "usage: tools/image.sh build <out.tar> | digest <archive> | compare <a.tar> <b.tar> | repro | size <archive> | smoke <archive>" >&2
+  echo "usage: tools/image.sh build <out.tar> | digest <archive> | compare <a.tar> <b.tar> | repro | size <archive> | smoke <archive> | push <archive> <repository> <tag>..." >&2
   exit 2
 }
 need() { local n=$1; shift; [[ $# -eq $n ]] || usage; }
@@ -117,10 +119,11 @@ load() {
      cat /tmp/docker.tar' <"$1" | docker load -q >/dev/null
 }
 
-# smoke state, removed on exit.
-smoke_name="" smoke_volume="" smoke_work=""
+# smoke state, removed on exit. smoke_name is the container under check.
+smoke_name="" smoke_volume="" smoke_work="" smoke_containers=()
 smoke_cleanup() {
-  [[ -n $smoke_name ]] && docker rm -f "$smoke_name" >/dev/null 2>&1
+  local c
+  for c in "${smoke_containers[@]}"; do docker rm -f "$c" >/dev/null 2>&1; done
   [[ -n $smoke_volume ]] && docker volume rm -f "$smoke_volume" >/dev/null 2>&1
   [[ -n $smoke_work ]] && rm -rf "$smoke_work"
   return 0
@@ -137,6 +140,7 @@ fail() {
 # run_hardened <name> [docker run args...] -- [image]: the documented hardening.
 run_hardened() {
   local name=$1; shift
+  smoke_name=$name smoke_containers+=("$name")
   docker run -d --name "$name" \
     --read-only --cap-drop ALL --security-opt no-new-privileges \
     --tmpfs /tmp:size=16m,noexec,nosuid,nodev \
@@ -179,7 +183,6 @@ smoke() {
   mkdir -p "$root/bin"
   smoke_work=$(mktemp -d "$root/bin/smoke.XXXXXX")
   smoke_volume=passkey-auth-smoke-$$
-  smoke_name=passkey-auth-smoke-$$
 
   load "$archive" || fail "docker load failed"
   image=passkey-auth:build
@@ -197,8 +200,8 @@ smoke() {
   chmod 0755 "$smoke_work"; chmod 0444 "$smoke_work/signing-key.pem"
   docker volume create "$smoke_volume" >/dev/null
 
-  run_hardened "$smoke_name" \
-    -v "$smoke_work/signing-key.pem:/run/secrets/signing-key.pem:ro" "$image"
+  local key=$smoke_work/signing-key.pem:/run/secrets/signing-key.pem:ro
+  run_hardened "passkey-auth-smoke-$$" -v "$key" "$image"
 
   code=$(wait_http /v1/jwks.json)
   [[ $code == 200 ]] || fail "GET /v1/jwks.json answered $code, expected 200"
@@ -213,7 +216,71 @@ smoke() {
   docker cp "$smoke_name:/data/passkey-auth.db" - 2>/dev/null | tar -t >/dev/null 2>&1 \
     || fail "no database file /data/passkey-auth.db in the volume"
 
+  # The e2e build tag never reaches the image: no test route.
+  code=$(http_get /test/) || fail "GET /test/: no answer"
+  [[ $code == 404 ]] || fail "GET /test/ answered $code, expected 404"
+
+  # No shell: docker run answers 127 when the entrypoint does not exist.
+  code=0
+  docker run --rm --entrypoint /bin/sh "$image" -c true >/dev/null 2>&1 || code=$?
+  [[ $code == 127 ]] || fail "--entrypoint /bin/sh exited $code, expected 127 (no shell)"
+
+  # A restart on the same volume, as an upgrade does, keeps the database file.
+  local inode
+  inode=$(db_inode) || fail "cannot stat /data/passkey-auth.db in the volume"
+  docker stop -t 10 "$smoke_name" >/dev/null
+  code=$(docker inspect -f '{{.State.ExitCode}}' "$smoke_name")
+  [[ $code == 0 ]] || fail "after SIGTERM, the container exited $code, expected 0"
+  docker rm "$smoke_name" >/dev/null
+  run_hardened "passkey-auth-smoke-$$-restart" -v "$key" "$image"
+  code=$(wait_http /v1/jwks.json)
+  [[ $code == 200 ]] || fail "after a restart, GET /v1/jwks.json answered $code, expected 200"
+  [[ $(db_inode) == "$inode" ]] || fail "after a restart, /data/passkey-auth.db is not the same file"
+  docker rm -f "$smoke_name" >/dev/null
+
+  # Without its signing key, the container stops at once and says why.
+  run_hardened "passkey-auth-smoke-$$-nokey" "$image"
+  code=$(timeout 10 docker wait "$smoke_name") || fail "without a signing key, still running after 10 s"
+  [[ $code != 0 ]] || fail "without a signing key, the container exited 0"
+  docker logs "$smoke_name" 2>&1 | grep -q PA_SIGNING_KEY_FILE \
+    || fail "without a signing key, the log does not name PA_SIGNING_KEY_FILE"
+
   echo "smoke: ok $digest"
+}
+
+# db_inode: the inode of the database file in the smoke volume, read by the
+# pinned skopeo image, which has a shell (the service image has none).
+db_inode() {
+  docker run --rm -v "$smoke_volume:/data:ro" --entrypoint stat "$SKOPEO_IMAGE" \
+    -c %i /data/passkey-auth.db
+}
+
+# push <archive> <repository> <tag>...: pushes the archive under each tag,
+# digests preserved, then checks that the registry serves the archive's digest
+# under every tag, and prints it. The token is read from stdin and the user from
+# REGISTRY_USER; the token reaches skopeo on its stdin, never in an argument or
+# in the container's environment.
+push() {
+  local archive=$1 repo=$2 digest token out tag got; shift 2
+  digest=$(manifest_digest "$archive")
+  [[ -n ${REGISTRY_USER:-} ]] || die "push: REGISTRY_USER is not set"
+  IFS= read -r token || [[ -n $token ]] || die "push: no registry token on stdin"
+  [[ -n $token ]] || die "push: empty registry token on stdin"
+  out=$({ printf '%s\n' "$token"; cat "$archive"; } |
+    docker run --rm -i -e REGISTRY_USER --entrypoint sh "$SKOPEO_IMAGE" -c '
+      set -e
+      IFS= read -r token
+      cat > /tmp/oci.tar
+      repo=$1; shift
+      printf "%s" "$token" | skopeo login -u "$REGISTRY_USER" --password-stdin "${repo%%/*}" >&2
+      for tag; do
+        skopeo copy -q --preserve-digests oci-archive:/tmp/oci.tar "docker://$repo:$tag" >&2
+        echo "$tag sha256:$(skopeo inspect --raw "docker://$repo:$tag" | sha256sum | cut -d" " -f1)"
+      done' sh "$repo" "$@") || die "push: push to $repo failed"
+  while read -r tag got; do
+    [[ $got == "$digest" ]] || die "push: $repo:$tag is $got in the registry, not $digest"
+  done <<<"$out"
+  echo "$digest"
 }
 
 cmd=${1:-}
@@ -225,6 +292,7 @@ case $cmd in
   repro)   need 0 "$@"; repro ;;
   size)    need 1 "$@"; size "$1" ;;
   smoke)   need 1 "$@"; smoke "$1" ;;
+  push)    [[ $# -ge 3 ]] || usage; push "$@" ;;
   *)       usage ;;
 esac
 exit

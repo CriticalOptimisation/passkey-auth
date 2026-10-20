@@ -25,7 +25,7 @@ LABEL org.opencontainers.image.source=https://github.com/CriticalOptimisation/pa
       org.opencontainers.image.licenses=Apache-2.0
 COPY --from=build --chown=0:0 --chmod=0555 /out/passkey-auth /passkey-auth
 COPY --from=build --chown=65532:65532 --chmod=0700 /out/data /data
-COPY --from=build --chown=0:0 --chmod=1777 /out/tmp /tmp
+COPY --from=build --chown=65532:65532 --chmod=0700 /out/tmp /tmp
 USER 65532:65532
 EXPOSE 8080
 ENTRYPOINT ["/passkey-auth"]
