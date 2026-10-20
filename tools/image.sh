@@ -298,3 +298,8 @@ esac
 exit
 
 return 0
+
+# --- Change History -------------------------------------------------------
+# | PR     | Summary                                                       |
+# |--------|---------------------------------------------------------------|
+# | #15    | build, check, smoke and push the container image              |

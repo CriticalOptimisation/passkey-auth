@@ -77,4 +77,5 @@ Change History
 | PR  | Summary |
 |-----|---------|
 | #12 | pointers to the docs; personal data (GDPR) section |
+| #15 | link to the container image docs |
 -->

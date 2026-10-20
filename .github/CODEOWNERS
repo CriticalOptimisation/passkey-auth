@@ -14,3 +14,4 @@
 # | PR     | Summary                                                       |
 # |--------|---------------------------------------------------------------|
 # | #12    | maintainer owns workflows and dependency manifests            |
+# | #15    | maintainer owns Dockerfile, .dockerignore, tools/image.sh     |

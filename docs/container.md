@@ -217,3 +217,11 @@ push to `main`, on a manual dispatch and on every published release:
 5. for a release: the digest is appended to the release notes.
 
 The GHCR package is public, so pulling needs no credentials.
+
+<!--
+Change History
+
+| PR  | Summary |
+|-----|---------|
+| #15 | image, verification, hardened runtime, image.sh, publication |
+-->

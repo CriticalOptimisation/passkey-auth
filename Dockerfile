@@ -29,3 +29,8 @@ COPY --from=build --chown=65532:65532 --chmod=0700 /out/tmp /tmp
 USER 65532:65532
 EXPOSE 8080
 ENTRYPOINT ["/passkey-auth"]
+
+# --- Change History -------------------------------------------------------
+# | PR     | Summary                                                       |
+# |--------|---------------------------------------------------------------|
+# | #15    | reproducible scratch image, non-root, fixed modes             |
