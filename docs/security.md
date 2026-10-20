@@ -53,6 +53,7 @@ It does **not** state:
 | **Result-signing key** | proving that a token comes from the service | Whoever holds it can forge a token for any account. It lives only in a mounted file and in memory. |
 | **Traefik** | TLS termination; rate limits | It is the only path from the LAN or the Internet to the service. |
 | **Host backend** | issuing registration tickets to the right person; verifying tokens; deciding what a login grants | The host owns the accounts. Every registration starts from its decision. |
+| **Host's DID document** (`PA_HOST_DID`) and whoever can publish it | naming the keys that may call the host routes | Its keys under `authentication` can create tickets and revoke credentials for any account. It is published with `official-did`'s tools, which add and revoke keys but never drop one, from a repository whose write access is narrow. |
 
 ### Untrusted components
 
@@ -61,7 +62,8 @@ It does **not** state:
 | **The network** | it can be observed or modified | TLS through Traefik for anything leaving the machine. The WebAuthn challenge and signatures make captured traffic useless for replay. |
 | **Page scripts, including the browser helper** | they run in the page and may be modified, bundled, or replaced | Nothing the helper does is trusted: the service verifies the authenticator's signed data and the origin the browser wrote. A *malicious script running on an allowed origin* is a different matter: see [XSS](#threats-and-residual-risks). |
 | **Callers of the public routes** | anyone on the Internet may call them | Registration needs a ticket. Verification needs a valid signature on a live, single-use challenge. Rate limits apply to every route. |
-| **Other containers on the shared network** | they can reach the service without going through Traefik | Host-facing routes authenticate every request in the service itself (#5). Public routes need no caller identity. |
+| **Other containers on the shared network** | they can reach the service without going through Traefik | Host-facing routes authenticate every request in the service itself, with a token signed by a key of the host's DID document. Public routes need no caller identity. |
+| **Callers of the public listener** asking for host paths | the host routes must never be reachable from the Internet | The public listener does not serve them, in any spelling; they live on their own listener. |
 | **Database, for confidentiality** | a copy may leak | It holds only public material: public keys, pseudonymous identifiers, ticket hashes (never the tickets). A leaked copy forges nothing. |
 | **Database, for integrity** | **this one matters** | An attacker who can *write* to it can add their own public key under any account, then log in as that account. Protect write access like the signing key: a volume reachable only by the service, no shared database user, backups as sensitive as the key. |
 
@@ -109,10 +111,13 @@ Hence the assurance profiles below.
 |---|---|---|
 | Phishing site | fails: wrong origin, so the browser refuses and the service rejects | none needed with an honest browser |
 | **XSS on an allowed origin** | an injected script can run a ceremony *as the page*: the user sees a genuine prompt, and the token is valid | the host's own XSS defences (CSP, output encoding). The host's nonce, bound to its server-side login attempt, means the token is only accepted for the session that asked for it. |
-| Stolen authenticator | useless without PIN or biometric (UV) | UV required; the host revokes the credential (#5) |
+| Stolen authenticator | useless without PIN or biometric (UV) | UV required; the host revokes the credential |
 | Unlocked device left with an open session | outside WebAuthn | the host's session policy |
 | Malware or a compromised browser | see [The browser](#the-browser) | the `attested-hardware` profile limits it to "one touch, one ceremony"; with any authenticator, nothing can stop a compromised browser from misdirecting a touch the user gives |
-| Stolen registration ticket | the thief registers their own passkey on the account | short TTL, single use, delivered over the host's authenticated session; the host can list and revoke credentials (#5) |
+| Stolen registration ticket | the thief registers their own passkey on the account | short TTL, single use, delivered over the host's authenticated session; the host can list and revoke credentials |
+| **Captured host token** | for up to 60 s, the thief can create tickets, list and revoke credentials | the token is not bound to its request and has no `jti`. Host requests stay on the machine's networks, which carry no third-party code in the deployments this service targets, or travel over TLS through Traefik. TLS from Traefik to the service may come later |
+| **Stolen host key** | the thief can manage every account, including registering their own passkey through a ticket | mark the key `revoked` in the DID document: refused within 5 minutes |
+| **DID document altered by an attacker** | a key added under `authentication` lets the attacker act as the host | write access to the document's repository; `official-did`'s deploy-time check refuses a dropped or altered key, but cannot tell a rogue added key from a rotation |
 | Leaked database | nothing forgeable | public material only |
 | **Database write access** | attacker adds a credential, takes over accounts | access control on the volume and backups |
 | **Signing key theft** | forged tokens for any account | file permissions, secret mount; rotation (`PA_PREVIOUS_SIGNING_KEY_FILE`) |
@@ -228,7 +233,9 @@ attestation, unless the deployment sets a minimum profile (#9).
 4. Protect its own pages against XSS, since a script on an allowed origin can
    run ceremonies.
 5. Revoke credentials when an authenticator is lost and when an account is
-   closed (#5).
+   closed.
+6. Keep its signing key secret, and publish its public keys only under
+   `authentication` in its DID document.
 
 ## Out of scope
 

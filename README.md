@@ -21,7 +21,7 @@ display name of a registration ticket, which it deletes with the ticket.
 
 | Data | Kept | Personal data? |
 |---|---|---|
-| account reference (an opaque identifier chosen by the host) | until the host revokes the account's credentials | yes, pseudonymous: the host can link it to a person |
+| account reference (an opaque identifier chosen by the host) | until the host revokes the account's last credential | yes, pseudonymous: the host can link it to a person |
 | user handle (64 random bytes) | same | yes, pseudonymous |
 | per credential: credential ID, public key, algorithm, authenticator model (AAGUID), flags, signature counter, creation and last-use times | until revoked by the host | yes, pseudonymous: it describes a person's device and when it was used |
 | registration ticket: account reference, display name, ticket hash | until used, at most `PA_TICKET_TTL` (15 min) | yes; the display name may be a real name |
@@ -55,7 +55,9 @@ belong to the controller and are light:
 - a mention in the host's privacy notice (Art. 13). The usual legal basis is
   the performance of the contract with the user (Art. 6(1)(b));
 - deletion when an account is closed: the host revokes the account's
-  credentials through the host-facing API (#5);
+  credentials through the [host-facing API](docs/api.md#host-facing-api).
+  Revoking the last one deletes the account reference, the user handle and
+  the account's open tickets;
 - an impact assessment (Art. 35) is not triggered by this service. The host's
   overall processing may trigger one, for example large-scale age
   verification or minors' data;

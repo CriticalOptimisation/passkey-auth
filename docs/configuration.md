@@ -8,7 +8,9 @@ faulty variable, if anything is missing or invalid.
 
 | Variable | Required | Default | Meaning |
 |---|---|---|---|
-| `PA_LISTEN` | no | `:8080` | listen address, plain HTTP (TLS is terminated by the reverse proxy) |
+| `PA_LISTEN` | no | `:8080` | listen address of the public routes, plain HTTP (TLS is terminated by the reverse proxy) |
+| `PA_HOST_LISTEN` | no | `:8081` | listen address of the [host-facing routes](api.md#host-facing-api), plain HTTP; always on |
+| `PA_HOST_DID` | **yes** | | the host's `did:web` identifier, e.g. `did:web:example.com`; its DID document holds the host's keys (see [Host keys](#host-keys)) |
 | `PA_RP_ID` | **yes** | | WebAuthn RP ID: the host's registrable domain, e.g. `example.com` |
 | `PA_RP_NAME` | no | value of `PA_RP_ID` | name shown by some authenticators |
 | `PA_ORIGINS` | **yes** | | comma-separated list of allowed origins, compared exactly, e.g. `https://example.com,https://www.example.com` |
@@ -30,7 +32,11 @@ Validation rules:
 - an origin whose host is not `PA_RP_ID` or one of its subdomains is accepted
   with a warning in the log: it only works once Related Origin Requests are
   configured on the RP ID's domain (see [api.md](api.md#cross-origin-access));
-- durations are positive; `PA_TOKEN_TTL` is at most `5m`.
+- durations are positive; `PA_TOKEN_TTL` is at most `5m`;
+- `PA_HOST_DID` is a `did:web` identifier that maps to an HTTPS URL: a
+  domain, an optional `%3A`-encoded port, then optional `:`-separated path
+  segments;
+- `PA_LISTEN` and `PA_HOST_LISTEN` differ.
 
 ## Signing key
 
@@ -49,12 +55,37 @@ configuration.
 `PA_PREVIOUS_SIGNING_KEY_FILE` once every host has refreshed its JWKS cache
 (5 minutes plus the token lifetime is enough).
 
+## Host keys
+
+The service holds no key of the host, and no shared secret. The host signs each
+request with a P-256 key of its own, and publishes the public half in its
+**DID document**, under `authentication`. The service fetches that document
+from the address `PA_HOST_DID` names, keeps it for 5 minutes, and checks each
+host token against it (see [api.md](api.md#host-authentication)).
+
+Publish the document with the tools of `official-did`. They generate each key's
+fragment from the key, add keys without ever dropping one, and mark a
+compromised key `revoked`:
+
+- **Rotation.** Add the new key under `authentication`, switch the host to it,
+  then mark the old key `revoked`. A token signed with the new key makes the
+  service fetch the document again at once.
+- **Compromise.** Mark the key `revoked`. The service stops accepting it when
+  its kept document expires, within 5 minutes.
+- **Separate keys.** The service accepts only keys under `authentication`. Keys
+  under `assertionMethod`, which sign credentials, never authenticate the host.
+
+The document must be reachable from the service over HTTPS. If it cannot be
+fetched, the service keeps the last copy it has; before the first successful
+fetch, the host routes answer `503 unavailable`.
+
 ## Storage
 
 The database holds public material only (see
 [api.md](api.md#security-properties)). Put it on a named volume so that
 credentials survive container upgrades. One deployment uses one database file;
-running several replicas needs another storage backend.
+running several replicas needs another storage backend (see
+[Scaling](#scaling)).
 
 ## Logs
 
@@ -80,7 +111,7 @@ the container's own labels.
 
 Calls that stay on the machine are not trusted for that reason alone. A
 browser ceremony is protected by WebAuthn, whatever the path of the request.
-The host-facing routes (#5) authenticate every request in the service itself,
+The host-facing routes authenticate every request in the service itself,
 because any container on the shared Docker network can reach the service
 without going through Traefik.
 
@@ -89,11 +120,45 @@ without going through Traefik.
 | Listener | Variable | Routes | Traefik entry point |
 |---|---|---|---|
 | public | `PA_LISTEN` (`:8080`) | ceremonies, JWKS, browser helper | the Internet-facing HTTPS entry point (`websecure`) |
-| host | `PA_HOST_LISTEN` (issue #5) | tickets and credential management | an entry point bound to the private network only, with TLS |
+| host | `PA_HOST_LISTEN` (`:8081`) | tickets and credential management | an entry point bound to the private network only, with TLS; or none, for a host on the same machine |
 
 The two route families never share a listener. If a public routing rule is
 too broad, it can still only reach the public listener, so it cannot expose
-the host-facing routes.
+the host-facing routes. The public listener answers `404` to every host path,
+whatever its spelling: the tests probe it with encoded, doubled and
+mixed-case variants.
+
+### One listener or two
+
+The host routes could also share the public listener, with Traefik rules
+keeping them off the public router. The service uses two listeners:
+
+| | One listener, Traefik rules | Two listeners |
+|---|---|---|
+| What separates the host routes | the public router's rule must match the public paths only, in every spelling Traefik and the service might read differently | the port: the public router's service points at `PA_LISTEN`, which does not serve the host routes |
+| A routing mistake | a too-broad public rule exposes the host routes to the Internet | a too-broad public rule still reaches only the public routes |
+| A caller that bypasses Traefik | reaches every route on the one port | reaches the host port too: the host token is what stops it, in both cases |
+| How to check it | probe Traefik with path variants, after every change to the labels | the service's own tests; a probe through Traefik confirms the deployment |
+| Cost | one port | one more port and one more router in the labels |
+
+Docker cannot publish one port of a container on one network only, so a
+second Docker network for the host port would add nothing: both listeners sit
+on the `proxy` network, and the host token protects the host listener. The
+networks behind Traefik carry no customer or third-party code.
+
+### Scaling
+
+Both listeners are served by every instance, so scaling is the same for each:
+
+- **Several instances on one machine.** Traefik balances each router across
+  the containers that carry its labels.
+- **Several machines.** A Traefik on each machine routes to its local
+  instances, and a load balancer in front spreads the traffic; or Docker
+  Swarm places the instances and Traefik's Swarm provider routes to them.
+- **One condition: shared storage.** Every instance must see the same
+  credentials, tickets and challenges. SQLite is one file on one machine, so
+  more than one instance needs another storage backend, such as PostgreSQL.
+  That backend is a change of its own.
 
 ### Public router
 
@@ -184,6 +249,42 @@ traefik.http.middlewares.pa-headers.headers.framedeny=true
   from its own location, so the `/auth` prefix needs no setting in the service.
   `PA_ISSUER` should be the public URL, including the prefix.
 
+### Host router
+
+A host on **the same machine** calls the host listener directly, over the
+Docker network (`http://passkey-auth:8081`), and needs no router.
+
+A host on **another machine** goes through a Traefik entry point bound to the
+private network only. The entry point is part of Traefik's static
+configuration, set by the operator, for example
+`--entrypoints.private.address=10.0.0.5:8443`. The service's labels add the
+router, with an IP allow-list and a rate limit:
+
+```
+traefik.http.services.pa-host.loadbalancer.server.port=8081
+
+traefik.http.routers.pa-host.rule=Host(`auth.internal.example.com`)
+traefik.http.routers.pa-host.entrypoints=private
+traefik.http.routers.pa-host.tls=true
+traefik.http.routers.pa-host.middlewares=pa-host-allow,pa-host-rl
+traefik.http.routers.pa-host.service=pa-host
+
+# Only the host's machines.
+traefik.http.middlewares.pa-host-allow.ipallowlist.sourcerange=10.0.0.0/24
+traefik.http.middlewares.pa-host-allow.ipallowlist.ipstrategy.depth=0
+
+traefik.http.middlewares.pa-host-rl.ratelimit.average=20
+traefik.http.middlewares.pa-host-rl.ratelimit.period=1s
+traefik.http.middlewares.pa-host-rl.ratelimit.burst=40
+```
+
+- **No path rule.** Everything that reaches the host router is meant for the
+  host listener, so the rule names the host name only.
+- **Each router names its service.** With two services in one container's
+  labels, Traefik cannot guess which one a router means.
+- **The allow-list is not the authentication.** It narrows who can try; the
+  host token decides.
+
 ### Defences in the service itself
 
 Traefik's limits bound the request rate. Two things in the service keep each
@@ -209,19 +310,19 @@ request cheap:
 | TLS termination and certificates | WebAuthn checks, including the origin check on `clientDataJSON` |
 | rate limits (per IP and global), in-flight limits, on every route | cheap checks before cryptography; the challenge TTL, purge and cap; the 64 KiB body limit |
 | HSTS, `nosniff`, frame denial | CORS on the ceremony routes. Its allow-list is `PA_ORIGINS`, the list WebAuthn checks, so a second list kept in Traefik could drift from it. |
-| IP allow-list on the host entry point (#5) | authentication of the host on every host-facing request (#5) |
+| private entry point and IP allow-list for the host router | authentication of the host on every host-facing request, with keys from its DID document |
 | | the usage log of the browser helper |
 
 ## Development builds
 
-Building with `-tags e2e` adds two routes used by the end-to-end tests and
-nowhere else:
+Building with `-tags e2e` adds what the end-to-end tests need, and nothing
+else:
 
-- `POST /test/tickets` with `{"account": "...", "displayName": "..."}` returns
-  `{"ticket": "..."}`, a registration ticket, standing in for the host-facing
-  API of issue #5;
-- `GET /test/` returns a blank HTML page on the service's origin, from which
-  the tests import the browser helper.
+- `GET /test/` on the public listener returns a blank HTML page on the
+  service's origin, from which the tests import the browser helper;
+- `PA_E2E_HOST_DID_FILE`, the path of a file read as the host's DID document
+  instead of fetching it over HTTPS. The tests sign host tokens with a key of
+  that document, and get their tickets from the host listener.
 
 Release builds never carry this tag.
 
