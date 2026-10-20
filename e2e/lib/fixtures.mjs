@@ -1,6 +1,7 @@
-// Fixtures: a CDP virtual authenticator of the project's class, the service's
-// test routes, and the browser helper driven from the test page.
+// Fixtures: a CDP virtual authenticator of the project's class, the host-facing
+// API of the service, and the browser helper driven from the test page.
 import { test as base, expect } from "@playwright/test";
+import { hostPort, hostToken } from "./host.mjs";
 
 export const PROFILES = {
   // Roaming CTAP2 USB security key with resident keys and user verification.
@@ -43,14 +44,32 @@ export const test = base.extend({
     await use({ add, remove, profile: PROFILES[authenticator] });
   },
 
-  /** Test-only routes of the e2e build. */
+  /** The host-facing API of the instance at `url`, called as its host. */
   service: async ({ request, baseURL }, use) => {
+    const host = (url, method, path, data) => {
+      const { port, origin } = new URL(url);
+      return request.fetch(`http://localhost:${hostPort(port)}${path}`, {
+        method,
+        data,
+        headers: { Authorization: `Bearer ${hostToken(port, origin)}` },
+      });
+    };
+    const credentialsPath = (account) => `/v1/accounts/${encodeURIComponent(account)}/credentials`;
     await use({
       async ticket(account, displayName = account, url = baseURL) {
-        const res = await request.post(new URL("/test/tickets", url).href, { data: { account, displayName } });
-        expect(res.status()).toBe(200);
+        const res = await host(url, "POST", "/v1/registration-tickets", { account, displayName });
+        expect(res.status()).toBe(201);
         return (await res.json()).ticket;
       },
+      async credentials(account, url = baseURL) {
+        const res = await host(url, "GET", credentialsPath(account));
+        expect(res.status()).toBe(200);
+        return res.json();
+      },
+      async revoke(account, id, url = baseURL) {
+        return (await host(url, "DELETE", `${credentialsPath(account)}/${id}`)).status();
+      },
+      token: (url = baseURL) => hostToken(new URL(url).port, new URL(url).origin),
     });
   },
 

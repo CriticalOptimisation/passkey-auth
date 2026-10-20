@@ -168,6 +168,112 @@ func Run(t *testing.T, open func(t *testing.T) store.Store) {
 			t.Fatalf("unknown credential: %v", err)
 		}
 	})
+
+	t.Run("user handle lookup creates nothing", func(t *testing.T) {
+		s := open(t)
+		if _, err := s.UserHandle(ctx, "a"); !errors.Is(err, store.ErrNotFound) {
+			t.Fatalf("unknown account: %v, want ErrNotFound", err)
+		}
+		if _, err := s.UserHandle(ctx, "a"); !errors.Is(err, store.ErrNotFound) {
+			t.Fatalf("the lookup created the account: %v", err)
+		}
+		if _, err := s.EnsureUser(ctx, "a", []byte("handle"), now); err != nil {
+			t.Fatal(err)
+		}
+		if h, err := s.UserHandle(ctx, "a"); err != nil || string(h) != "handle" {
+			t.Fatalf("known account: %q, %v", h, err)
+		}
+	})
+
+	t.Run("deleting credentials, then the account with its last one", func(t *testing.T) {
+		s := open(t)
+		cred := func(id string, handle []byte) store.Credential {
+			return store.Credential{ID: []byte(id), UserHandle: handle, PublicKey: []byte("cose"), CreatedAt: now, LastUsedAt: now}
+		}
+		ticket := func(hash, account string) store.Ticket {
+			return store.Ticket{Hash: []byte(hash), Account: account, DisplayName: "D", ExpiresAt: now.Add(time.Minute)}
+		}
+		ha, err := s.EnsureUser(ctx, "a", []byte("handle-a"), now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		hb, err := s.EnsureUser(ctx, "b", []byte("handle-b"), now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, c := range []store.Credential{cred("a1", ha), cred("a2", ha), cred("b1", hb)} {
+			if err := s.AddCredential(ctx, c); err != nil {
+				t.Fatal(err)
+			}
+		}
+		for _, tk := range []store.Ticket{ticket("ta1", "a"), ticket("ta2", "a"), ticket("tb", "b")} {
+			if err := s.CreateTicket(ctx, tk); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		// Another user's credential, or an unknown one, is not found.
+		if err := s.DeleteCredential(ctx, ha, []byte("b1")); !errors.Is(err, store.ErrNotFound) {
+			t.Fatalf("other user's credential: %v, want ErrNotFound", err)
+		}
+		if err := s.DeleteCredential(ctx, ha, []byte("none")); !errors.Is(err, store.ErrNotFound) {
+			t.Fatalf("unknown credential: %v, want ErrNotFound", err)
+		}
+		if err := s.DeleteCredential(ctx, []byte("nobody"), []byte("a1")); !errors.Is(err, store.ErrNotFound) {
+			t.Fatalf("unknown user: %v, want ErrNotFound", err)
+		}
+		if _, err := s.Credential(ctx, []byte("b1")); err != nil {
+			t.Fatalf("b1 was deleted by a refused call: %v", err)
+		}
+
+		// Not the last credential: the account and its tickets stay.
+		if err := s.DeleteCredential(ctx, ha, []byte("a1")); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.Credential(ctx, []byte("a1")); !errors.Is(err, store.ErrNotFound) {
+			t.Fatalf("a1 survived: %v", err)
+		}
+		if h, err := s.UserHandle(ctx, "a"); err != nil || !bytes.Equal(h, ha) {
+			t.Fatalf("account a after its first deletion: %q, %v", h, err)
+		}
+		if _, err := s.ConsumeTicket(ctx, []byte("ta1")); err != nil {
+			t.Fatalf("ticket of a after its first deletion: %v", err)
+		}
+
+		// The last credential: the account and its open tickets go too.
+		if err := s.DeleteCredential(ctx, ha, []byte("a2")); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.UserHandle(ctx, "a"); !errors.Is(err, store.ErrNotFound) {
+			t.Fatalf("account a survived its last credential: %v", err)
+		}
+		if _, err := s.Account(ctx, ha); !errors.Is(err, store.ErrNotFound) {
+			t.Fatalf("user handle of a survived: %v", err)
+		}
+		if _, err := s.ConsumeTicket(ctx, []byte("ta2")); !errors.Is(err, store.ErrNotFound) {
+			t.Fatalf("open ticket of a survived: %v", err)
+		}
+		if list, err := s.CredentialsOf(ctx, ha); err != nil || len(list) != 0 {
+			t.Fatalf("credentials of a: %d, %v", len(list), err)
+		}
+
+		// Account b is untouched.
+		if _, err := s.Credential(ctx, []byte("b1")); err != nil {
+			t.Fatalf("b1: %v", err)
+		}
+		if _, err := s.UserHandle(ctx, "b"); err != nil {
+			t.Fatalf("account b: %v", err)
+		}
+		if _, err := s.ConsumeTicket(ctx, []byte("tb")); err != nil {
+			t.Fatalf("ticket of b: %v", err)
+		}
+
+		// The account can start again, with a new user handle.
+		h, err := s.EnsureUser(ctx, "a", []byte("handle-a2"), now)
+		if err != nil || string(h) != "handle-a2" {
+			t.Fatalf("account a again: %q, %v", h, err)
+		}
+	})
 }
 
 // --- Change History -------------------------------------------------------
