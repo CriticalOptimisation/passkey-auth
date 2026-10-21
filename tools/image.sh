@@ -147,6 +147,7 @@ run_hardened() {
     -v "$smoke_volume:/data" \
     -e PA_RP_ID=example.com -e PA_ORIGINS=https://example.com \
     -e PA_ISSUER=https://auth.example.com -e PA_AUDIENCE=smoke \
+    -e PA_HOST_DID=did:web:example.com \
     -e PA_SIGNING_KEY_FILE=/run/secrets/signing-key.pem \
     "$@" >/dev/null
 }
@@ -303,3 +304,4 @@ return 0
 # | PR     | Summary                                                       |
 # |--------|---------------------------------------------------------------|
 # | #15    | build, check, smoke and push the container image              |
+# | #14    | smoke run sets the required PA_HOST_DID                       |
