@@ -27,10 +27,11 @@ COPY --from=build --chown=0:0 --chmod=0555 /out/passkey-auth /passkey-auth
 COPY --from=build --chown=65532:65532 --chmod=0700 /out/data /data
 COPY --from=build --chown=65532:65532 --chmod=0700 /out/tmp /tmp
 USER 65532:65532
-EXPOSE 8080
+EXPOSE 8080 8081
 ENTRYPOINT ["/passkey-auth"]
 
 # --- Change History -------------------------------------------------------
 # | PR     | Summary                                                       |
 # |--------|---------------------------------------------------------------|
 # | #15    | reproducible scratch image, non-root, fixed modes             |
+# | #14    | expose the host listener, 8081                                |

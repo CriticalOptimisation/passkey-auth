@@ -29,6 +29,7 @@ func env(t *testing.T, override map[string]string) func(string) string {
 	base := map[string]string{
 		"PA_RP_ID": "example.com", "PA_ORIGINS": "https://example.com, https://www.example.com",
 		"PA_ISSUER": "https://example.com/auth", "PA_AUDIENCE": "host", "PA_SIGNING_KEY_FILE": keyFile(t),
+		"PA_HOST_DID": "did:web:example.com",
 	}
 	for k, v := range override {
 		base[k] = v
@@ -51,6 +52,22 @@ func TestDefaults(t *testing.T) {
 	}
 	if len(a.SigningKey) != ed25519.PrivateKeySize || a.PreviousKey != nil {
 		t.Error("signing keys")
+	}
+	if s.HostListen != ":8081" {
+		t.Errorf("PA_HOST_LISTEN default = %q, want :8081", s.HostListen)
+	}
+	if s.HostDID != "did:web:example.com" {
+		t.Errorf("HostDID = %q", s.HostDID)
+	}
+}
+
+func TestHostSettings(t *testing.T) {
+	s, err := config.Load(env(t, map[string]string{"PA_HOST_LISTEN": "127.0.0.1:9081", "PA_HOST_DID": "did:web:calcool.ai:hosts:demo"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.HostListen != "127.0.0.1:9081" || s.HostDID != "did:web:calcool.ai:hosts:demo" {
+		t.Errorf("host settings: %q, %q", s.HostListen, s.HostDID)
 	}
 }
 
@@ -84,6 +101,14 @@ func TestRefused(t *testing.T) {
 		"PA_TICKET_TTL":                {"PA_TICKET_TTL": "-1m"},
 		"PA_TOKEN_TTL":                 {"PA_TOKEN_TTL": "6m"},
 		"PA_MAX_CHALLENGES":            {"PA_MAX_CHALLENGES": "0"},
+		"PA_HOST_DID":                  {"PA_HOST_DID": ""},
+		"PA_HOST_DID ":                 {"PA_HOST_DID": "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK"},
+		"PA_HOST_DID  ":                {"PA_HOST_DID": "did:web:"},
+		"PA_HOST_DID   ":               {"PA_HOST_DID": "https://example.com"},
+		"PA_HOST_LISTEN":               {"PA_LISTEN": ":9000", "PA_HOST_LISTEN": ":9000"},
+		"PA_HOST_LISTEN ":              {"PA_LISTEN": ":8081"}, // the host listener's default
+		"PA_HOST_DID    ":              {"PA_HOST_DID": "did:web:example.com:.."},
+		"PA_HOST_DID     ":             {"PA_HOST_DID": "did:web:example.com%3Ahttp"},
 	}
 	for name, override := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -99,3 +124,4 @@ func TestRefused(t *testing.T) {
 // | PR     | Summary                                                       |
 // |--------|---------------------------------------------------------------|
 // | #12    | defaults and refused configurations                           |
+// | #14    | host settings and their refusals                              |

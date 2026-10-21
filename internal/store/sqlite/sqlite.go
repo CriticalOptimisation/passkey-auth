@@ -140,6 +140,9 @@ func (s *Store) AddCredential(ctx context.Context, c store.Credential) error {
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		c.ID, c.UserHandle, c.PublicKey, int64(c.SignCount), strings.Join(c.Transports, ","), aaguid(c.AAGUID),
 		b2i(c.BackupEligible), b2i(c.BackupState), c.AttestationFormat, ms(c.CreatedAt), ms(c.LastUsedAt))
+	if err != nil && strings.Contains(err.Error(), "FOREIGN KEY constraint failed") {
+		return fmt.Errorf("%w: no such user: %v", store.ErrNotFound, err)
+	}
 	return conflict(err)
 }
 
@@ -197,6 +200,48 @@ func (s *Store) RecordUse(ctx context.Context, id []byte, oldCount, newCount uin
 	return nil
 }
 
+func (s *Store) UserHandle(ctx context.Context, account string) ([]byte, error) {
+	var handle []byte
+	err := s.db.QueryRowContext(ctx, `SELECT user_handle FROM users WHERE account = ?`, account).Scan(&handle)
+	return handle, notFound(err)
+}
+
+// DeleteCredential runs in one transaction. With the last credential of an
+// account, it also deletes the account's open tickets and the challenges of
+// its registrations in progress, then the account itself.
+func (s *Store) DeleteCredential(ctx context.Context, userHandle, id []byte) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	res, err := tx.ExecContext(ctx, `DELETE FROM credentials WHERE id = ? AND user_handle = ?`, id, userHandle)
+	if err != nil {
+		return err
+	}
+	if n, err := res.RowsAffected(); err != nil {
+		return err
+	} else if n != 1 {
+		return store.ErrNotFound
+	}
+	var left int
+	if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM credentials WHERE user_handle = ?`, userHandle).Scan(&left); err != nil {
+		return err
+	}
+	if left == 0 {
+		for _, q := range []string{
+			`DELETE FROM tickets WHERE account = (SELECT account FROM users WHERE user_handle = ?)`,
+			`DELETE FROM challenges WHERE kind = 'registration' AND user_handle = ?`,
+			`DELETE FROM users WHERE user_handle = ?`,
+		} {
+			if _, err := tx.ExecContext(ctx, q, userHandle); err != nil {
+				return err
+			}
+		}
+	}
+	return tx.Commit()
+}
+
 func aaguid(b []byte) []byte {
 	if len(b) == 0 {
 		return make([]byte, store.AAGUIDBytes)
@@ -222,3 +267,4 @@ func conflict(err error) error {
 // | PR     | Summary                                                       |
 // |--------|---------------------------------------------------------------|
 // | #12    | SQLite implementation of the store                            |
+// | #14    | UserHandle, DeleteCredential, deleted user on AddCredential   |

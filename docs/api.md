@@ -12,6 +12,7 @@ written before the implementation; the tests illustrate it.
 - [Result token](#result-token)
 - [Keys](#keys)
 - [Browser helper](#browser-helper)
+- [Host-facing API](#host-facing-api)
 - [Cross-origin access](#cross-origin-access)
 - [Errors](#errors)
 - [Security properties](#security-properties)
@@ -23,7 +24,8 @@ authenticator bound to an account of the host application. It is not an
 identity provider and keeps no session:
 
 1. The host decides who may register a passkey for an account and obtains a
-   one-time **registration ticket** for it (host-facing API, issue #5).
+   one-time **registration ticket** for it, from the
+   [host-facing API](#host-facing-api).
 2. The browser runs a ceremony against the browser-facing routes below, usually
    through the [browser helper](#browser-helper).
 3. The service answers a successful ceremony with a short-lived **result
@@ -87,8 +89,8 @@ sent to the authenticator in the options, then deleted with the ticket.
 one. A ceremony that fails at any step, a lost connection or an expired
 ticket included, costs only the ticket: credentials already registered keep
 working. To replace an authenticator, the host registers the new one first and
-revokes the old one (host-facing API, #5) only after the new registration
-token has arrived.
+[revokes](#delete-v1accountsaccountcredentialsid) the old one only after the
+new registration token has arrived.
 
 ### `POST /v1/registration/options`
 
@@ -377,6 +379,167 @@ its backend. They reject with a `PasskeyAuthError` whose `code` is either an
 [error code](#errors) of the service, or `ceremony_failed` when the browser or
 the user aborted the ceremony (`cause` holds the browser's `DOMException`).
 
+## Host-facing API
+
+The host backend creates registration tickets, lists the credentials of an
+account and revokes them. These routes are served **only on the host
+listener** (`PA_HOST_LISTEN`, default `:8081`), never on the public one (see
+[configuration.md](configuration.md#listeners)). The public listener answers
+`404 not_found` for every one of these paths, whatever their spelling.
+
+A deployment serves **one host**, named by `PA_HOST_DID`. The
+[conventions](#conventions) of the public routes apply: JSON bodies of at most
+64 KiB, unknown fields rejected, the same [error](#errors) envelope.
+
+### Host authentication
+
+Every request carries `Authorization: Bearer <host token>`, a compact JWS
+(JWT) signed by one of the host's keys. The service checks it before anything
+else.
+
+Header:
+
+| Field | Value |
+|---|---|
+| `alg` | `ES256` (ECDSA P-256 with SHA-256); nothing else is accepted |
+| `typ` | `passkey-host+jwt` |
+| `kid` | the DID URL of the signing key: `<PA_HOST_DID>#<fragment>` |
+
+Claims:
+
+| Claim | Value |
+|---|---|
+| `iss` | `PA_HOST_DID` |
+| `aud` | `PA_ISSUER`, the service |
+| `iat` | issue time, at most 5 s in the future of the service's clock |
+| `exp` | expiry; `exp - iat` is at most 60 s; checked with 5 s of clock skew |
+
+The token is not bound to its request and has no `jti`. Whoever captures it can
+replay it to any host route until it expires. The host's requests therefore
+travel only on the machine's own networks, or over TLS through Traefik (see
+[security.md](security.md#threats-and-residual-risks)).
+
+**The host's keys** come from its DID document. `PA_HOST_DID` is a `did:web`
+identifier, and the service resolves it as the
+[did:web method](https://w3c-ccg.github.io/did-method-web/) says:
+
+| `PA_HOST_DID` | Document fetched |
+|---|---|
+| `did:web:example.com` | `https://example.com/.well-known/did.json` |
+| `did:web:example.com:hosts:demo` | `https://example.com/hosts/demo/did.json` |
+| `did:web:localhost%3A8443` | `https://localhost:8443/.well-known/did.json` |
+
+- The document is fetched over HTTPS only, within 5 s, and may not exceed
+  64 KiB. Its `id` must be `PA_HOST_DID`.
+- A key is accepted only if:
+  - it is a `verificationMethod` whose `id` is the token's `kid`. A relative
+    `id` (`#fragment`) is read against `PA_HOST_DID`;
+  - it is listed under `authentication`, by reference or embedded. A key
+    listed only under `assertionMethod`, which signs credentials, is refused;
+  - it is not marked `revoked`;
+  - its `publicKeyJwk` is an EC P-256 key.
+- The document is kept for **5 minutes**. A token whose `kid` is not in the
+  kept document causes one early fetch, at most once every 30 s, so that a
+  newly added key works at once. A key marked `revoked` stops working when the
+  kept document expires, within 5 minutes.
+- When a fetch fails, the service keeps the last document it fetched, logs
+  a warning, and tries again 30 s later at the earliest. Until a first
+  document has been fetched, every host route answers `503 unavailable` to a
+  request that carries a token.
+
+A failed check answers `401 host_unauthorized`, with
+`WWW-Authenticate: Bearer`. The log gives the reason, never the token.
+
+A host signs a fresh token for each request, or reuses one for a few seconds.
+With [`jose`](https://github.com/panva/jose) in Node.js:
+
+```js
+import { SignJWT, importJWK } from "jose";
+
+const key = await importJWK(privateJwk, "ES256");
+const token = await new SignJWT({})
+  .setProtectedHeader({ alg: "ES256", typ: "passkey-host+jwt", kid: `${did}#${fragment}` })
+  .setIssuer(did)                              // PA_HOST_DID
+  .setAudience("https://example.com/auth")     // PA_ISSUER
+  .setIssuedAt()
+  .setExpirationTime("60s")
+  .sign(key);
+```
+
+### `POST /v1/registration-tickets`
+
+Request:
+
+```json
+{ "account": "<account reference>", "displayName": "<display name>" }
+```
+
+`account` and `displayName` are 1 to 256 bytes each. The display name is shown
+by the authenticator and deleted with the ticket (see
+[Registration](#registration)).
+
+Response `201`:
+
+```json
+{ "ticket": "<opaque ticket string>", "expiresAt": "2027-01-15T08:00:00Z" }
+```
+
+`expiresAt` is in RFC 3339 form, UTC: the ticket is valid for `PA_TICKET_TTL`.
+The host hands the ticket to the browser over its own authenticated session.
+
+Errors: `invalid_request`.
+
+### `GET /v1/accounts/{account}/credentials`
+
+`{account}` is one path segment, percent-encoded (`encodeURIComponent` in
+JavaScript): an account reference that contains `/` is sent with `%2F`.
+
+Response `200`, oldest credential first:
+
+```json
+[
+  {
+    "id": "<credential ID>",
+    "createdAt": "2027-01-15T08:00:00Z",
+    "lastUsedAt": "2027-01-16T09:30:00Z",
+    "aaguid": "00000000-0000-0000-0000-000000000000",
+    "be": true,
+    "bs": true,
+    "fmt": "none",
+    "transports": ["internal", "hybrid"]
+  }
+]
+```
+
+| Field | Meaning |
+|---|---|
+| `id` | credential ID, base64url, as in the result token's `cred` |
+| `createdAt`, `lastUsedAt` | RFC 3339, UTC; `lastUsedAt` equals `createdAt` until the first authentication |
+| `aaguid` | authenticator model, UUID string, all zeros when unknown |
+| `be`, `bs` | backup eligible, backup state, as last reported |
+| `fmt` | attestation format at registration |
+| `transports` | as reported by the browser at registration; may be empty |
+
+An account the service does not know answers `200 []`.
+
+### `DELETE /v1/accounts/{account}/credentials/{id}`
+
+`{account}` as above; `{id}` is the credential ID, base64url.
+
+Response `204`, with no body. A credential that does not exist, or that belongs
+to another account, answers `404 not_found`.
+
+- **The credential is deleted**, not marked. The next
+  `/v1/authentication/verify` with it fails with `credential_unknown`. Result
+  tokens already issued stay valid until their `exp`, at most `PA_TOKEN_TTL`.
+- **Deleting the last credential of an account deletes the account**: its
+  account reference, its user handle and its open registration tickets. A
+  registration already in progress for it fails at
+  `/v1/registration/verify` with `challenge_invalid`. A later ticket for the
+  same account reference starts with a new user handle.
+- There is no route to delete an account that has no credential: such an
+  account holds nothing but open tickets, which expire.
+
 ## Cross-origin access
 
 - The JWKS and the helper allow any origin (`Access-Control-Allow-Origin: *`).
@@ -409,12 +572,13 @@ Every error has the same shape:
 | 400 | `challenge_invalid` | challenge unknown, expired, already used, or issued for the other ceremony |
 | 400 | `credential_unknown` | no such credential for this user handle |
 | 400 | `verification_failed` | origin, RP ID, flags, attestation, signature or counter check failed |
-| 404 | `not_found` | no such route |
+| 401 | `host_unauthorized` | host routes: host token missing or invalid |
+| 404 | `not_found` | no such route; on the host routes, also no such credential for this account |
 | 405 | `method_not_allowed` | wrong method for the route |
 | 413 | `request_too_large` | body over 64 KiB |
 | 415 | `unsupported_media_type` | `POST` without `Content-Type: application/json` |
 | 500 | `internal` | unexpected error |
-| 503 | `unavailable` | too many live challenges: retry later (`Retry-After: 60`) |
+| 503 | `unavailable` | too many live challenges: retry later (`Retry-After: 60`); on the host routes, the host's DID document has never been fetched |
 
 `message` is for humans and may change. All checks of a ceremony report
 `verification_failed` without saying which check failed; the reason is written
@@ -437,6 +601,7 @@ in [security.md](security.md).
 | Cloned authenticators | counter regression rejected |
 | No enumeration | discoverable credentials, empty `allowCredentials`, random user handles |
 | Forgery towards the host | result token signed with Ed25519, short-lived, audience-bound, nonce-bound |
+| Only the host manages accounts | host routes served on their own listener only; every request carries a short ES256 token signed by a key of the host's DID document, under `authentication` |
 | Database theft | only public material is stored: credential public keys, counters, flags, user handles, account references and challenges. Registration tickets are never stored: each row holds only the SHA-256 hash of its ticket, as a lookup key, and a hash cannot give the ticket back, so a stolen database yields no usable ticket. The signing key lives in a mounted file and in memory only. |
 
 <!--
@@ -445,4 +610,5 @@ Change History
 | PR  | Summary |
 |-----|---------|
 | #12 | API contract: ceremonies, token, JWKS, helper, errors |
+| #14 | host-facing API: host token, did:web keys, three routes |
 -->

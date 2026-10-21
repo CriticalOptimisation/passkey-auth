@@ -1,11 +1,13 @@
 // Starts one instance of the service, built with -tags e2e, with a fresh
-// signing key and database in a temporary directory.
+// signing key, database and host (lib/host.mjs) in a temporary directory. Its
+// host listener is on <port> + HOST_PORT_OFFSET.
 //   node scripts/start-server.mjs <port> <allowed origins>
 import { spawn } from "node:child_process";
 import { generateKeyPairSync } from "node:crypto";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { createHost, hostPort, HOST_DID } from "../lib/host.mjs";
 
 const [port, origins] = process.argv.slice(2);
 if (!port || !origins) {
@@ -17,6 +19,8 @@ const dir = mkdtempSync(join(tmpdir(), `passkey-auth-e2e-${port}-`));
 const { privateKey } = generateKeyPairSync("ed25519");
 const keyFile = join(dir, "signing-key.pem");
 writeFileSync(keyFile, privateKey.export({ type: "pkcs8", format: "pem" }), { mode: 0o600 });
+const didFile = join(dir, "did.json");
+writeFileSync(didFile, JSON.stringify(createHost(port)));
 
 const binary = process.env.PA_E2E_BINARY ?? resolve(import.meta.dirname, "../../bin/passkey-auth-e2e");
 const child = spawn(binary, [], {
@@ -24,6 +28,9 @@ const child = spawn(binary, [], {
   env: {
     ...process.env,
     PA_LISTEN: `:${port}`,
+    PA_HOST_LISTEN: `:${hostPort(port)}`,
+    PA_HOST_DID: HOST_DID,
+    PA_E2E_HOST_DID_FILE: didFile,
     PA_RP_ID: "localhost",
     PA_RP_NAME: "passkey-auth e2e",
     PA_ORIGINS: origins,
@@ -42,3 +49,4 @@ child.on("exit", (code, signal) => process.exit(code ?? (signal ? 1 : 0)));
 // | PR     | Summary                                                       |
 // |--------|---------------------------------------------------------------|
 // | #12    | starts the e2e build with a fresh key and database            |
+// | #14    | host listener on port + 1000, host DID document file          |

@@ -99,7 +99,8 @@ for every `PA_*` variable.
 |---|---|---|
 | Read-only root filesystem | `--read-only` | the service writes only to its database |
 | Non-root | built in (`65532:65532`) | no root process to escape with |
-| No capabilities | `--cap-drop ALL` | the service listens on an unprivileged port and needs none |
+| No capabilities | `--cap-drop ALL` | the service listens on unprivileged ports and needs none |
+| Host port | never published on a public interface | the host listener (`PA_HOST_LISTEN`, `8081`) serves tickets and credential management; see [Listeners](configuration.md#listeners) |
 | No privilege gain | `--security-opt no-new-privileges` | blocks set-uid escalation |
 | Temporary files | `--tmpfs /tmp:size=16m,noexec,nosuid,nodev` | SQLite may need a temporary directory; nothing else is writable |
 | Database | `-v passkey-auth-data:/data` (named volume) | credentials survive upgrades; a new named volume takes the owner of the image's `/data` (`65532`, mode `0700`) |
@@ -131,6 +132,7 @@ docker run -d --name passkey-auth \
   -e PA_ORIGINS=https://example.com \
   -e PA_ISSUER=https://auth.example.com \
   -e PA_AUDIENCE=example-host \
+  -e PA_HOST_DID=did:web:example.com \
   -e PA_SIGNING_KEY_FILE=/run/secrets/signing-key.pem \
   ghcr.io/criticaloptimisation/passkey-auth@sha256:<digest>
 ```
@@ -154,6 +156,7 @@ services:
       PA_ORIGINS: https://example.com
       PA_ISSUER: https://auth.example.com
       PA_AUDIENCE: example-host
+      PA_HOST_DID: did:web:example.com
       PA_SIGNING_KEY_FILE: /run/secrets/signing-key.pem
     # Traefik labels: see docs/configuration.md, "Behind Traefik".
     restart: unless-stopped
@@ -224,4 +227,5 @@ Change History
 | PR  | Summary |
 |-----|---------|
 | #15 | image, verification, hardened runtime, image.sh, publication |
+| #14 | PA_HOST_DID in the examples; host port kept private |
 -->
