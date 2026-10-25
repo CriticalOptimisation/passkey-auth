@@ -16,7 +16,10 @@
 set -euo pipefail
 
 readonly BUILDKIT_IMAGE=moby/buildkit:v0.33.0@sha256:6c2fa84a6b61ccd72899dde4239f8d5717f05f9a8ca6f3cad185fb1a95a94de3
-readonly SKOPEO_IMAGE=quay.io/skopeo/stable:v1.22.3@sha256:3cee4b44cb54d59f5b8822f8ca6379d6aafa4308834e5d9d958f5a4dc553a428
+# The plain version tags of quay.io/skopeo/stable are rebuilt every day, and
+# the index they pointed to soon stops being served (#17): only the -immutable
+# tag keeps its digest. A newer version changes both the tag and the digest.
+readonly SKOPEO_IMAGE=quay.io/skopeo/stable:v1.22.3-immutable@sha256:c0ee1f4edca5c01cb8d5611124f92f3cc47196ecab68aee5d0f90834e00574d5
 readonly PLATFORM=linux/amd64
 readonly IMAGE_USER=65532:65532
 readonly MAX_BYTES=30000000
