@@ -10,24 +10,32 @@
 #   tools/image.sh smoke <archive>        runs the image hardened and checks it
 #   tools/image.sh push <archive> <repository> <tag>...
 #                                         pushes the archive as is; token on stdin
+#   tools/image.sh pins [<reference>...]  exit 1 unless every pinned image keeps the rule
 #
 # Exit status: 0 success, 1 a check or a build failed, 2 usage error.
 set -euo pipefail
 
 readonly BUILDKIT_IMAGE=moby/buildkit:v0.33.0@sha256:6c2fa84a6b61ccd72899dde4239f8d5717f05f9a8ca6f3cad185fb1a95a94de3
-readonly SKOPEO_IMAGE=quay.io/skopeo/stable:v1.22.3@sha256:3cee4b44cb54d59f5b8822f8ca6379d6aafa4308834e5d9d958f5a4dc553a428
+# The plain version tags of quay.io/skopeo/stable are rebuilt every day, and
+# the index they pointed to soon stops being served (#17): only the -immutable
+# tag keeps its digest. A newer version changes both the tag and the digest.
+readonly SKOPEO_IMAGE=quay.io/skopeo/stable:v1.22.3-immutable@sha256:c0ee1f4edca5c01cb8d5611124f92f3cc47196ecab68aee5d0f90834e00574d5
 readonly PLATFORM=linux/amd64
 readonly IMAGE_USER=65532:65532
 readonly MAX_BYTES=30000000
 readonly MANIFEST_TYPE=application/vnd.oci.image.manifest.v1+json
 # Files that enter the image (see .dockerignore).
 readonly CONTEXT_PATHS=(Dockerfile .dockerignore go.mod go.sum cmd internal web)
+# Images of the containers project (podman, buildah, skopeo): their version
+# tags are rebuilt every day and the old index is soon no longer served; only
+# their -immutable tags are never overwritten (#17, docs/container.md).
+readonly CONTAINERS_PROJECT='^quay\.io/(containers/(podman|buildah|skopeo)|(podman|buildah|skopeo)/stable)$'
 
 root=$(git rev-parse --show-toplevel)
 
 die() { echo "image.sh: $*" >&2; exit 1; }
 usage() {
-  echo "usage: tools/image.sh build <out.tar> | digest <archive> | compare <a.tar> <b.tar> | repro | size <archive> | smoke <archive> | push <archive> <repository> <tag>..." >&2
+  echo "usage: tools/image.sh build <out.tar> | digest <archive> | compare <a.tar> <b.tar> | repro | size <archive> | smoke <archive> | push <archive> <repository> <tag>... | pins [<reference>...]" >&2
   exit 2
 }
 need() { local n=$1; shift; [[ $# -eq $n ]] || usage; }
@@ -284,6 +292,27 @@ push() {
   echo "$digest"
 }
 
+# pins [<reference>...]: checks each reference (by default the script's own
+# pinned images): a tag and a sha256 digest; an -immutable tag for an image of
+# the containers project. Every reference is checked; exit 1 if one fails.
+pins() {
+  local ref repo tag status=0
+  [[ $# -gt 0 ]] || set -- "$BUILDKIT_IMAGE" "$SKOPEO_IMAGE"
+  for ref; do [[ $ref != -* ]] || usage; done
+  for ref; do
+    if [[ ! $ref =~ ^([^@]+):([^:@/]+)@sha256:[0-9a-f]{64}$ ]]; then
+      echo "image.sh: pins: $ref: not pinned by digest" >&2; status=1; continue
+    fi
+    repo=${BASH_REMATCH[1]} tag=${BASH_REMATCH[2]}
+    if [[ $repo =~ $CONTAINERS_PROJECT && $tag != *-immutable ]]; then
+      echo "image.sh: pins: $ref: image of the containers project without an -immutable tag" >&2
+      status=1; continue
+    fi
+    echo "ok $ref"
+  done
+  return "$status"
+}
+
 cmd=${1:-}
 [[ -n $cmd ]] && shift
 case $cmd in
@@ -294,6 +323,7 @@ case $cmd in
   size)    need 1 "$@"; size "$1" ;;
   smoke)   need 1 "$@"; smoke "$1" ;;
   push)    [[ $# -ge 3 ]] || usage; push "$@" ;;
+  pins)    pins "$@" ;;
   *)       usage ;;
 esac
 exit
@@ -305,3 +335,4 @@ return 0
 # |--------|---------------------------------------------------------------|
 # | #15    | build, check, smoke and push the container image              |
 # | #14    | smoke run sets the required PA_HOST_DID                       |
+# | #19    | skopeo pinned on its -immutable tag; pins subcommand          |

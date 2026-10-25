@@ -187,6 +187,7 @@ buildx, `git`, `jq` and `openssl`; no Go installation.
 | `tools/image.sh size <archive>` | prints `compressed <bytes>` (what a pull downloads) and `uncompressed <bytes>` | `0`; `1` uncompressed size above 30 MB (30 000 000 bytes) |
 | `tools/image.sh smoke <archive>` | loads the image and runs it hardened (below) | `0` all checks passed; `1` a check failed |
 | `tools/image.sh push <archive> <repository> <tag>…` | pushes the archive as is, digests preserved, under each tag; the registry token is read from standard input, the user from `REGISTRY_USER`; checks that the registry serves the archive's digest under every tag, and prints it | `0` pushed; `1` push failed or digest differs |
+| `tools/image.sh pins [<reference>…]` | checks the pinned image references: by default the script's own (`moby/buildkit`, `quay.io/skopeo/stable`), else the references given; prints `ok <reference>` for each one that keeps the rule below, and one diagnostic for each one that breaks it; needs only bash, no Docker and no network | `0` all keep the rule; `1` at least one breaks it |
 
 Usage errors exit with `2`. Diagnostics go to standard error, one line each,
 starting with `image.sh:`.
@@ -204,6 +205,34 @@ starting with `image.sh:`.
   `PA_SIGNING_KEY_FILE`;
 - after a restart on the same volume, the database is still there.
 
+### Helper images
+
+Besides BuildKit, the script runs one helper image, `quay.io/skopeo/stable`. It
+converts the OCI archive for Docker's classic image store, probes the service
+during `smoke` (`curl`, `stat`, from the service's network namespace and
+volume), and pushes the archive. The helper never enters the published image,
+so its version has no effect on the digest.
+
+Every image the script runs is pinned as `<repository>:<tag>@sha256:<digest>`.
+A digest is immutable, but it stays pullable only while the registry still
+serves it. The images of the containers project (`podman`, `buildah` and
+`skopeo`, on `quay.io/containers/*` and `quay.io/*/stable`) are rebuilt every
+day under their version tags, and the index a version tag pointed to stops
+being served soon after (#17). Only their `-immutable` tags (`vX-immutable`,
+`vX.Y-immutable`, `vX.Y.Z-immutable`) are never overwritten. `pins` enforces
+the rule:
+
+- the reference has a tag and a `sha256` digest of 64 hexadecimal digits,
+  otherwise `image.sh: pins: <reference>: not pinned by digest`;
+- for an image of the containers project, the tag ends in `-immutable`,
+  otherwise `image.sh: pins: <reference>: image of the containers project
+  without an -immutable tag`.
+
+`-immutable` is a convention of the containers project only, not a general
+convention of registries; for other images, `pins` checks the digest only.
+Moving the helper to a newer version changes both its tag and its digest in
+`tools/image.sh`.
+
 ## Publication
 
 The workflow `.github/workflows/image.yml` runs on every pull request, on every
@@ -212,7 +241,7 @@ push to `main`, on a manual dispatch and on every published release:
 1. two builds of the commit, on two separate runners, without cache;
 2. `compare` of their digests, and the sizes, in the run summary; the run fails
    if the digests differ or the image exceeds 30 MB;
-3. `smoke` on the first build;
+3. `pins`, then `smoke` on the first build;
 4. on `main` and for releases only, never on a pull request: the archive that
    passed these checks is pushed as is (its digest is checked again in the
    registry), attested, and the attestation verified with
@@ -228,4 +257,5 @@ Change History
 |-----|---------|
 | #15 | image, verification, hardened runtime, image.sh, publication |
 | #14 | PA_HOST_DID in the examples; host port kept private |
+| #19 | helper images pinned on -immutable tags; image.sh pins |
 -->
