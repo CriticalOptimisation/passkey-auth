@@ -91,7 +91,9 @@ jobs:
           name: image-a
           path: ${{ runner.temp }}
       - name: pinned images use immutable tags
-        run: tools/image.sh pins
+        run: |
+          tools/image.sh pins
+          tools/image-pins.test.sh
       - run: tools/image.sh smoke "$RUNNER_TEMP/image-a.tar"
 
   # The archive that passed the checks, pushed as is, attested, verified.
