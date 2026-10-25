@@ -201,3 +201,4 @@ jobs:
 # | PR     | Summary                                                       |
 # |--------|---------------------------------------------------------------|
 # | #15    | two builds compared, size, smoke, publish, attest             |
+# | #19    | pinned images checked before smoke                            |

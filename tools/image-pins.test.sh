@@ -73,6 +73,9 @@ check "-x is a usage error" 2 "" "$usage" -- -x
 
 exit "$failed"
 
+return 0
+
 # --- Change History -------------------------------------------------------
 # | PR     | Summary                                                       |
 # |--------|---------------------------------------------------------------|
+# | #19    | edge cases of image.sh pins                                   |

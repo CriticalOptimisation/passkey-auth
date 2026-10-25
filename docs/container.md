@@ -257,4 +257,5 @@ Change History
 |-----|---------|
 | #15 | image, verification, hardened runtime, image.sh, publication |
 | #14 | PA_HOST_DID in the examples; host port kept private |
+| #19 | helper images pinned on -immutable tags; image.sh pins |
 -->

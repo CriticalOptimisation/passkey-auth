@@ -335,3 +335,4 @@ return 0
 # |--------|---------------------------------------------------------------|
 # | #15    | build, check, smoke and push the container image              |
 # | #14    | smoke run sets the required PA_HOST_DID                       |
+# | #19    | skopeo pinned on its -immutable tag; pins subcommand          |
