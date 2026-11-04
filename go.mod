@@ -6,7 +6,7 @@ toolchain go1.27.1
 
 require (
 	github.com/fxamacker/cbor/v2 v2.9.6
-	github.com/go-jose/go-jose/v4 v4.1.5
+	github.com/go-jose/go-jose/v4 v4.1.6
 	github.com/go-webauthn/webauthn v0.18.2
 	modernc.org/sqlite v1.60.1
 )
